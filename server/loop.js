@@ -91,6 +91,21 @@ export class Engine {
   async beginSession() {
     const { state } = this.store;
     this.llm = createLLM(this.config);
+    // Per-song noise rotation: keep the sidebar's session status showing the
+    // roll that's actually being injected right now.
+    this.llm.onNoise = (noise) => {
+      if (this.store.state.session) {
+        this.store.state.session.noise = noise;
+        this.store.touch();
+      }
+    };
+    this.llm.onConcepts = (concepts, injected) => {
+      if (this.store.state.session) {
+        this.store.state.session.concepts = concepts;
+        this.store.state.session.injected = injected;
+        this.store.touch();
+      }
+    };
     const info = await this.llm.begin(state.guidance, state.settings);
     this.inSession = true;
     state.session = {
