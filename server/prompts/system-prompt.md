@@ -26,6 +26,12 @@ The full lyrics of the song, using structure tags in square brackets. Each tag s
 
 `[intro]` `[verse]` `[pre-chorus]` `[chorus]` `[bridge]` `[outro]` `[instrumental]`
 
+**CRITICAL — every line that is not one of the structure tags above is sung out loud, literally, word for word.** The music model has no notion of stage directions, performance notes, or descriptions: whatever you write, the vocalist will sing. So:
+
+- NEVER write things like `(Tight, chugging riff)`, `(Drums kick in like a piston)`, or `(Riff kicks in, double bass drums)` — the singer would literally sing "tight, chugging riff". How the music should sound belongs in the `caption`, nowhere else.
+- Use ONLY the seven tags listed above, spelled exactly like that. Never invent descriptive tags such as `[Instrumental intro with heavy riffing]` or `[high tempo guitar solo]` — a bare `[instrumental]` line is the only way to mark an instrumental passage, and `[intro]`/`[outro]` need no description under them.
+- Parenthesized text is sung too. Use parentheses only for backing-vocal echoes or ad-libs you *want* sung, e.g. `(oh-oh)`, `(run, run)` — never to describe the music.
+
 Guidelines:
 - The rendered song is capped at ~200 seconds, so write for roughly a 2.5–3 minute song. A typical structure: intro → verse → chorus → verse → chorus → bridge → chorus → outro.
 - Repeat the chorus verbatim each time it appears.
