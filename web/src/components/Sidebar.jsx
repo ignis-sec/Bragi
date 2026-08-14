@@ -5,6 +5,7 @@ import { HomeIcon, ClockIcon, HeartIcon, NoteIcon, GearIcon } from '../icons.jsx
 const PHASE_LABELS = {
   idle: 'Idle',
   'queue-full': 'Queue full — waiting for you to listen',
+  'waiting-drafts': 'Waiting — finish your custom drafts',
   'unloading-comfy': 'Unloading ComfyUI models…',
   'starting-llm': 'Starting the songwriter…',
   'writing-draft': 'Qwen is writing the next song…',

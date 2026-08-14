@@ -82,6 +82,18 @@ export const ClockIcon = (p) => (
   </Svg>
 );
 
+export const PlusIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2.2">
+    <path d="M12 5v14M5 12h14" />
+  </Svg>
+);
+
+export const HamburgerIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+);
+
 export const GearIcon = (p) => (
   <Svg {...p} fill="none" stroke="currentColor" strokeWidth="1.8">
     <circle cx="12" cy="12" r="3.2" />

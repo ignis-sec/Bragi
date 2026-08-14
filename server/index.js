@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
@@ -155,6 +156,38 @@ app.patch('/api/guidance', (req, res) => {
 });
 
 // ---- upcoming drafts ----
+
+// Add a custom (user-written) song to the up-next queue. It won't be
+// dispatched to ComfyUI until both caption and lyrics are filled in.
+app.post('/api/drafts', (req, res) => {
+  const draft = {
+    id: crypto.randomUUID(),
+    name: String(req.body?.name ?? '').trim() || 'Untitled',
+    caption: String(req.body?.caption ?? ''),
+    lyrics: String(req.body?.lyrics ?? ''),
+    custom: true,
+    concepts: null,
+    injected: false,
+    noise: null,
+    createdAt: Date.now(),
+  };
+  store.state.drafts.push(draft);
+  store.touch();
+  res.json(draft);
+});
+
+// Reorder the up-next queue. Ids not listed (e.g. a draft written while the
+// user was dragging) keep their place at the end.
+app.post('/api/drafts/reorder', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+  if (!ids) return res.status(400).json({ error: 'ids must be an array' });
+  const byId = new Map(store.state.drafts.map((d) => [d.id, d]));
+  const next = ids.map((id) => byId.get(id)).filter(Boolean);
+  for (const d of store.state.drafts) if (!next.includes(d)) next.push(d);
+  store.state.drafts = next;
+  store.touch();
+  res.json({ ok: true });
+});
 
 app.patch('/api/drafts/:id', (req, res) => {
   const draft = store.draft(req.params.id);

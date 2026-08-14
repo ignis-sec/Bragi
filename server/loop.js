@@ -202,8 +202,17 @@ export class Engine {
           if (!state.loopEnabled) break;
           if (!state.drafts.length) continue; // top-up interrupted
 
-          // Oldest draft goes to the studio; the rest stay editable.
-          dispatching = state.drafts.shift();
+          // First render-ready draft goes to the studio; blank custom drafts
+          // are skipped until the user fills them in.
+          const readyIdx = state.drafts.findIndex(
+            (d) => d.caption?.trim() && d.lyrics?.trim(),
+          );
+          if (readyIdx === -1) {
+            this.setPhase('waiting-drafts', 'All drafts are incomplete');
+            await sleep(3000);
+            continue;
+          }
+          dispatching = state.drafts.splice(readyIdx, 1)[0];
           state.generating = { ...dispatching, startedAt: Date.now() };
           this.store.touch();
 

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { RefreshIcon, CrossIcon } from '../icons.jsx';
+import { RefreshIcon, CrossIcon, PlusIcon, HamburgerIcon } from '../icons.jsx';
 
 // One upcoming song, editable until it's handed to ComfyUI. Keyed by draft.id
 // upstream, so a rewrite (new id) remounts and resets the buffer.
-function DraftItem({ draft, index, open, onToggle }) {
+function DraftItem({ draft, index, open, onToggle, drag }) {
   const [buf, setBuf] = useState({
     name: draft.name,
     caption: draft.caption,
@@ -12,6 +12,7 @@ function DraftItem({ draft, index, open, onToggle }) {
   });
   const [saveState, setSaveState] = useState('saved'); // saved | saving | conflict
   const [rewriting, setRewriting] = useState(false);
+  const [grabbed, setGrabbed] = useState(false);
   const timer = useRef(null);
 
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -48,14 +49,49 @@ function DraftItem({ draft, index, open, onToggle }) {
     api(`/api/drafts/${draft.id}`, { method: 'DELETE' }).catch(() => {});
   };
 
+  const incomplete = !buf.caption.trim() || !buf.lyrics.trim();
+
   return (
-    <div className={`draft-item ${open ? 'open' : ''}`}>
+    <div
+      className={`draft-item ${open ? 'open' : ''} ${
+        drag.overId === draft.id ? (drag.overAfter ? 'drag-over-after' : 'drag-over-before') : ''
+      }`}
+      draggable={grabbed}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        drag.onStart(draft.id);
+      }}
+      onDragEnd={() => {
+        setGrabbed(false);
+        drag.onEnd();
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        drag.onOver(draft.id, e.clientY > rect.top + rect.height / 2);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        drag.onDrop();
+      }}
+    >
       <div className="draft-head" onClick={onToggle}>
+        <span
+          className="drag-handle"
+          title="Drag to reorder"
+          onMouseDown={() => setGrabbed(true)}
+          onMouseUp={() => setGrabbed(false)}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <HamburgerIcon size={14} />
+        </span>
         <span className="draft-pos">{index + 1}</span>
         <div className="row-meta">
           <div className="row-name">
             {buf.name || 'Untitled'}
             {index === 0 && <span className="draft-next-tag">next up</span>}
+            {draft.custom && <span className="draft-next-tag custom">custom</span>}
+            {incomplete && <span className="draft-next-tag incomplete">incomplete</span>}
             {draft.concepts?.map((c) => (
               <span
                 key={c.word}
@@ -96,7 +132,7 @@ function DraftItem({ draft, index, open, onToggle }) {
           <label>
             <span>Caption (metadata for the music model)</span>
             <textarea
-              rows={2}
+              rows={4}
               value={buf.caption}
               onChange={(e) => update('caption', e.target.value)}
             />
@@ -119,13 +155,56 @@ function DraftItem({ draft, index, open, onToggle }) {
 export default function DraftsPanel({ state }) {
   const drafts = state.drafts ?? [];
   const [openId, setOpenId] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  const [overAfter, setOverAfter] = useState(false);
+  const pendingOpen = useRef(null);
 
-  // Keep something sensible expanded: default to the first draft.
+  // Keep something sensible expanded: default to the first draft, and open a
+  // just-created custom draft as soon as it arrives over SSE.
   useEffect(() => {
+    if (pendingOpen.current && drafts.some((d) => d.id === pendingOpen.current)) {
+      setOpenId(pendingOpen.current);
+      pendingOpen.current = null;
+      return;
+    }
     if (openId !== 'none' && !drafts.some((d) => d.id === openId)) {
       setOpenId(drafts[0]?.id ?? null);
     }
   }, [drafts, openId]);
+
+  const addCustom = async () => {
+    try {
+      const draft = await api('/api/drafts', { method: 'POST', body: {} });
+      pendingOpen.current = draft.id;
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const drag = {
+    overId: dragId ? overId : null,
+    overAfter,
+    onStart: (id) => setDragId(id),
+    onEnd: () => {
+      setDragId(null);
+      setOverId(null);
+    },
+    onOver: (id, after) => {
+      if (!dragId || id === dragId) return;
+      setOverId(id);
+      setOverAfter(after);
+    },
+    onDrop: () => {
+      if (!dragId || !overId || dragId === overId) return;
+      const order = drafts.map((d) => d.id).filter((id) => id !== dragId);
+      const at = order.indexOf(overId) + (overAfter ? 1 : 0);
+      order.splice(at, 0, dragId);
+      api('/api/drafts/reorder', { method: 'POST', body: { ids: order } }).catch(() => {});
+      setDragId(null);
+      setOverId(null);
+    },
+  };
 
   return (
     <section className="card draft-card">
@@ -133,9 +212,15 @@ export default function DraftsPanel({ state }) {
         <div>
           <h2>Up next</h2>
           <div className="card-sub">
-            Songs Qwen already wrote, in order — the first goes to the studio next. Edit them
-            freely until then.
+            Songs in line for the studio, in order. Edit them freely until dispatch; drag the
+            handle to reorder.
           </div>
+        </div>
+        <div className="card-head-actions">
+          <button className="pill-btn" onClick={addCustom} title="Write a song yourself">
+            <PlusIcon size={13} />
+            Custom song
+          </button>
         </div>
       </div>
       {drafts.length === 0 ? (
@@ -152,6 +237,7 @@ export default function DraftsPanel({ state }) {
             index={i}
             open={openId === draft.id}
             onToggle={() => setOpenId(openId === draft.id ? 'none' : draft.id)}
+            drag={drag}
           />
         ))
       )}

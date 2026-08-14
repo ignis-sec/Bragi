@@ -79,7 +79,7 @@
   "generation": {
     "maxQueuedSongs": 3,
     "draftLookahead": 3,
-    "recentSongsInPrompt": true
+    "recentSongsInPrompt": false
   },
   "storage": {
     "songsDir": "./songs"

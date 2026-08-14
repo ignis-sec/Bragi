@@ -571,6 +571,37 @@ textarea {
   letter-spacing: 0.5px;
 }
 
+.draft-next-tag.custom {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.draft-next-tag.incomplete {
+  background: rgba(227, 179, 65, 0.15);
+  color: #e3b341;
+}
+
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  color: #555;
+  cursor: grab;
+  flex: none;
+  padding: 4px 2px;
+}
+
+.drag-handle:hover {
+  color: var(--muted);
+}
+
+.draft-item.drag-over-before {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+
+.draft-item.drag-over-after {
+  box-shadow: 0 2px 0 0 var(--accent);
+}
+
 .draft-item .draft-fields {
   padding: 4px 12px 14px;
 }

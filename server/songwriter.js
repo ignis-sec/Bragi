@@ -30,7 +30,7 @@ export const SUBMIT_SONG_TOOL = {
         lyrics: {
           type: 'string',
           description:
-            'Full song lyrics with Title Case structure tags on their own lines ([Intro], [Verse 1], [Pre-Chorus], [Chorus], [Guitar solo], [Bridge], [Outro]), blank line between sections. Every non-tag line is sung verbatim — no stage directions.',
+            'Full song lyrics with Title Case structure tags on their own lines ([Intro], [Verse 1], [Pre-Chorus], [Chorus], [Guitar solo], [Bridge], [Outro]), blank line between sections. Every non-tag line is sung verbatim — no stage directions and no parentheses anywhere.',
         },
       },
       required: ['song_name', 'caption', 'lyrics'],
