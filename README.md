@@ -7,7 +7,7 @@ Disposable music, generated on the fly, completely locally. A Qwen model (via LM
 ```
 ┌─> free ComfyUI VRAM (POST /free — unload cached models)
 │      │
-│   Qwen tops the draft queue up to 3 songs (LM Studio, tool call submit_song)
+│   Qwen refills the draft pool to lookahead + 1 (LM Studio, tool call submit_song)
 │      │
 │   unload Qwen (free VRAM)
 │      │
@@ -46,7 +46,7 @@ Open the dashboard, optionally fill in guidance (genre, BPM, mood, …), and fli
 | `comfyui.baseUrl` / `workflow` | ComfyUI endpoint and workflow template (with `${caption}` / `${lyrics}` placeholders) |
 | `comfyui.freeWaitMs` | How long to wait after `POST /free` for VRAM to actually come back |
 | `generation.maxQueuedSongs` | The loop pauses when this many unplayed songs are queued |
-| `generation.draftLookahead` | How many drafts Qwen writes ahead (default 3) |
+| `generation.draftLookahead` | How many drafts stay waiting/editable while a render runs (default 3). The pool is refilled to this size + 1 every time a render finishes, however many are missing |
 | `storage.songsDir` | Folder where finished songs are saved, named `<Song Name>.mp3` |
 | `server.port` | Dashboard/API port |
 

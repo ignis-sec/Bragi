@@ -6,11 +6,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The pipeline keeps a queue of editable drafts ahead of ComfyUI:
 //
-//   [free ComfyUI VRAM] -> [Qwen tops drafts up to 3] -> [unload Qwen]
+//   [free ComfyUI VRAM] -> [Qwen tops drafts up to lookahead + 1] -> [unload Qwen]
 //        -> [ComfyUI renders the oldest draft]
 //
-// All drafts are written before the render starts, so the GPU never holds both
-// models — and during the whole render every remaining draft stays editable.
+// The pool is refilled every time a render finishes (before the next one
+// starts), writing however many drafts are missing — so even after deletes or
+// rewrites, `draftLookahead` drafts stay editable during the whole render. All
+// writing happens between renders, so the GPU never holds both models.
 export class Engine {
   constructor(store, config) {
     this.store = store;
@@ -67,14 +69,11 @@ export class Engine {
     }
   }
 
-  // Fill the draft queue up to the lookahead target, one Qwen call at a time.
-  async topUpDrafts() {
+  // Fill the draft queue up to `total`, one Qwen call at a time.
+  async topUpDrafts(total) {
     const { state } = this.store;
-    while (state.loopEnabled && state.drafts.length < this.draftTarget) {
-      this.setPhase(
-        'writing-draft',
-        `Writing drafts (${state.drafts.length + 1}/${this.draftTarget})`,
-      );
+    while (state.loopEnabled && state.drafts.length < total) {
+      this.setPhase('writing-draft', `Writing drafts (${state.drafts.length + 1}/${total})`);
       try {
         state.drafts.push(await this.makeDraft());
       } catch (err) {
@@ -122,12 +121,14 @@ export class Engine {
             continue;
           }
 
-          // Mirror of the Qwen unload: kick ComfyUI's cached models out of
-          // VRAM before the LM Studio routine starts.
-          if (state.drafts.length < this.draftTarget) {
+          // Refill the pool to lookahead + 1: the extra one is dispatched to
+          // ComfyUI right below, leaving `draftTarget` drafts waiting and
+          // editable for the whole render. (Free ComfyUI's VRAM first —
+          // mirror of the Qwen unload.)
+          if (state.drafts.length < this.draftTarget + 1) {
             this.setPhase('unloading-comfy', 'Freeing VRAM for Qwen');
             await freeComfy(this.config);
-            await this.topUpDrafts();
+            await this.topUpDrafts(this.draftTarget + 1);
             this.setPhase('unloading-llm', 'Freeing VRAM for ComfyUI');
             await unloadModel(this.config);
           }
