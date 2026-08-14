@@ -143,51 +143,117 @@ function applySampling(body, sampling = {}) {
   if (sampling.repeatPenalty != null) body.repeat_penalty = sampling.repeatPenalty;
 }
 
-// Plain-text chat completion against any OpenAI-compatible endpoint (used for
-// album-cover image prompts). Returns the assistant's text, <think> stripped.
-export async function requestCompletion({
+const SUBMIT_COVER_TOOL = {
+  type: 'function',
+  function: {
+    name: 'submit_cover_prompt',
+    description:
+      'Submit the finished image-generation prompt for the album cover. Must be called exactly once.',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: {
+          type: 'string',
+          description:
+            'Very descriptive natural-language description of the image contents and style — subject, scene, composition, palette, lighting, mood — framed as album cover art.',
+        },
+      },
+      required: ['prompt'],
+    },
+  },
+};
+
+// Ask the model for an album-cover image prompt via a forced tool call, with
+// the same fallback ladder as songwriting (XML tool syntax, bare JSON, and
+// finally the raw reply text).
+export async function requestCoverPrompt({
   baseUrl,
   apiKey,
   model,
   sampling = {},
   system,
   user,
-  maxTokens = 800,
+  maxTokens = 2048,
   ttl,
 }) {
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-  const body = {
-    model,
-    messages: [
-      { role: 'system', content: system },
-      { role: 'user', content: user },
-    ],
-    temperature: sampling.temperature ?? 0.8,
-    max_tokens: maxTokens,
-  };
-  applySampling(body, sampling);
-  if (ttl) body.ttl = ttl;
+  const messages = [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ];
+  const base = { model, messages, temperature: sampling.temperature ?? 0.8, max_tokens: maxTokens };
+  applySampling(base, sampling);
+  if (ttl) base.ttl = ttl;
 
-  logEvent('prompts', `completion request -> ${baseUrl}`, { system, user });
+  const send = async (body) => {
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    return { res, text: res.ok ? null : await res.text().catch(() => '') };
+  };
+
+  logEvent('prompts', `cover-prompt request -> ${baseUrl}`, { system, user });
   const t0 = Date.now();
-  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+  let { res, text } = await send({
+    ...base,
+    tools: [SUBMIT_COVER_TOOL],
+    tool_choice: 'required',
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Completion request failed (${res.status}): ${text.slice(0, 300)}`);
+  if (res.status === 400 && /tool/i.test(text ?? '')) {
+    logEvent('llmResponses', `tools rejected (${res.status}) — retrying without tools`, { text });
+    ({ res, text } = await send({
+      ...base,
+      messages: [
+        {
+          role: 'system',
+          content: `${system}\n\nIMPORTANT: function calling is unavailable — respond with ONLY the image prompt text, nothing else.`,
+        },
+        messages[1],
+      ],
+    }));
   }
+  if (!res.ok) {
+    logEvent('llmResponses', `cover-prompt request FAILED (${res.status})`, { text });
+    throw new Error(`Cover prompt request failed (${res.status}): ${(text ?? '').slice(0, 300)}`);
+  }
+
   const data = await res.json();
   const msg = data.choices?.[0]?.message ?? {};
-  logEvent('llmResponses', `completion response in ${Date.now() - t0}ms`, { message: msg });
-  const text = String(msg.content || msg.reasoning_content || '')
-    .replace(/<think>[\s\S]*?<\/think>/g, '')
-    .trim();
-  if (!text) throw new Error('The model returned an empty completion');
-  return text;
+  logEvent('llmResponses', `cover-prompt response in ${Date.now() - t0}ms`, { message: msg });
+
+  let prompt = null;
+  const call =
+    msg.tool_calls?.find((c) => c.function?.name === 'submit_cover_prompt') ?? msg.tool_calls?.[0];
+  if (call?.function?.arguments) {
+    try {
+      prompt = JSON.parse(call.function.arguments).prompt;
+    } catch {
+      prompt = extractJsonObject(call.function.arguments)?.prompt;
+    }
+  }
+  if (!prompt) {
+    for (const t of [msg.content, msg.reasoning_content].filter(Boolean)) {
+      const args = extractXmlToolCall(t) ?? extractJsonObject(t);
+      if (args?.prompt) {
+        prompt = args.prompt;
+        break;
+      }
+    }
+  }
+  if (!prompt) {
+    // Last resort: a plain-text reply IS the prompt (never the reasoning).
+    const raw = String(msg.content ?? '')
+      .replace(/<think>[\s\S]*?<\/think>/g, '')
+      .trim();
+    if (raw) prompt = raw;
+  }
+  if (!prompt || !String(prompt).trim()) {
+    throw new Error('The art director returned no image prompt');
+  }
+  return String(prompt).trim();
 }
 
 // One songwriting request against any OpenAI-compatible chat endpoint

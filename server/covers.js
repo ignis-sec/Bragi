@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config, DATA_DIR, ROOT } from './config.js';
 import { freeComfy, renderImage } from './comfyui.js';
-import { requestCompletion } from './songwriter.js';
+import { requestCoverPrompt } from './songwriter.js';
 import { LlamaCppBackend } from './llamacpp.js';
 import { unloadModel } from './lmstudio.js';
 import { logEvent } from './logger.js';
@@ -133,11 +133,10 @@ export class CoverEngine {
       for (const song of songs) {
         if (this.shouldYield()) break;
         try {
-          const prompt = await requestCompletion({
+          const prompt = await requestCoverPrompt({
             ...target,
             system,
             user: `Title: ${song.name}\n\nCaption:\n${song.caption}\n\nLyrics:\n${song.lyrics}`,
-            maxTokens: 2048,
           });
           song.coverPrompt = prompt.replace(/\s+/g, ' ').trim();
           logEvent('covers', `cover prompt for "${song.name}"`, { prompt: song.coverPrompt });
