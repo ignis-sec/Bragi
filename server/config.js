@@ -27,7 +27,11 @@ function loadDotEnv(file) {
 }
 loadDotEnv(path.join(ROOT, '.env'));
 
-export const config = JSON.parse(fs.readFileSync(path.join(ROOT, 'config.json'), 'utf8'));
+export const config = JSON.parse(
+  fs.readFileSync(process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json'), 'utf8'),
+);
+
+export const DATA_DIR = path.join(ROOT, 'data');
 
 // Where finished songs live, named after the song. User-facing, so it defaults
 // to a visible ./songs folder rather than data/.

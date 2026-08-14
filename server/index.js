@@ -4,9 +4,10 @@ import express from 'express';
 import { config, ROOT, SONGS_DIR } from './config.js';
 import { Store } from './store.js';
 import { Engine } from './loop.js';
+import { createLLM } from './llm.js';
 
 const store = new Store();
-const engine = new Engine(store, config);
+const engine = new Engine(store, config, createLLM(config));
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -56,7 +57,7 @@ app.patch('/api/settings', (req, res) => {
 });
 
 app.patch('/api/guidance', (req, res) => {
-  const allowed = ['genre', 'bpm', 'mood', 'instruments', 'vocals', 'language', 'extra'];
+  const allowed = ['genre', 'bpm', 'mood', 'instruments', 'vocals', 'language', 'extra', 'concepts'];
   for (const key of allowed) {
     if (key in (req.body ?? {})) store.state.guidance[key] = String(req.body[key] ?? '');
   }

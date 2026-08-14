@@ -6,8 +6,9 @@ const PHASE_LABELS = {
   idle: 'Idle',
   'queue-full': 'Queue full — waiting for you to listen',
   'unloading-comfy': 'Unloading ComfyUI models…',
+  'starting-llm': 'Starting the songwriter…',
   'writing-draft': 'Qwen is writing the next song…',
-  'unloading-llm': 'Unloading Qwen…',
+  'unloading-llm': 'Stopping the songwriter…',
   'rendering-audio': 'ComfyUI is rendering audio…',
   error: 'Error — retrying shortly',
 };
@@ -19,11 +20,20 @@ function EngineStatus({ state }) {
     label = `Rendering “${generating.name}”…`;
   }
   const busy = loopEnabled && !['idle', 'queue-full', 'error'].includes(engine?.phase);
+  const session = state.session;
   return (
     <div className="engine-status">
       <span className={`status-dot ${loopEnabled ? (busy ? 'busy' : 'on') : 'off'}`} />
       <div>
         <div className="status-label">{label}</div>
+        {session?.concepts?.length > 0 && (
+          <div className="status-concepts">
+            {session.injected ? 'Injecting: ' : 'Seeding: '}
+            {session.concepts
+              .map((c) => (c.strength != null ? `${c.word} ×${c.strength}` : c.word))
+              .join(', ')}
+          </div>
+        )}
         {lastError && <div className="status-error">{lastError}</div>}
       </div>
     </div>
@@ -77,6 +87,7 @@ function GuidancePanel({ state }) {
         </select>
       </label>
       {field('language', 'Language', 'e.g. English, Turkish')}
+      {field('concepts', 'Concept seeds (j-lens)', 'off — ocean, rust:0.2, or "random"')}
       <label className="g-field">
         <span>Extra instructions</span>
         <textarea

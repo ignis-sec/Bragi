@@ -5,3 +5,5 @@ web/dist/
 data/
 *.log
 songs/
+models/
+__pycache__/

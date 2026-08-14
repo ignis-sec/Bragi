@@ -1,0 +1,6 @@
+# Installed via uv (see README):
+#   uv venv tools/.venv && uv pip install --python tools/.venv/bin/python -r tools/requirements.txt
+torch
+numpy
+gguf
+tokenizers

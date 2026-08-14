@@ -68,7 +68,18 @@ function GeneratingCard({ state }) {
       </span>
       <div className="gen-meta">
         <div className="card-sub">In the studio · {mm}:{ss}</div>
-        <div className="gen-name">{gen.name}</div>
+        <div className="gen-name">
+          {gen.name}
+          {gen.concepts?.map((c) => (
+            <span
+              key={c.word}
+              className={`concept-chip ${gen.injected ? 'injected' : ''}`}
+              title={c.strength != null ? `×${c.strength}` : undefined}
+            >
+              {c.word}
+            </span>
+          ))}
+        </div>
         <div className="row-caption">{gen.caption}</div>
       </div>
       <button

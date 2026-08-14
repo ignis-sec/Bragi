@@ -40,6 +40,8 @@ Open the dashboard, optionally fill in guidance (genre, BPM, mood, …), and fli
 
 | Key | Meaning |
 | --- | --- |
+| `llm.backend` | `"lmstudio"` or `"llamacpp"` — who runs the songwriter (see below) |
+| `llamacpp.*` | llama-server binary, GGUF path, port, ctx, extra args, and the `jlens` block |
 | `lmstudio.baseUrl` / `model` | LM Studio endpoint and model id |
 | `lmstudio.unload` | `"cli"` (run `lms unload --all`), `"ttl"` (rely on the per-request TTL only), or `"none"` |
 | `lmstudio.ttlSeconds` | JIT TTL sent with each request as a fallback auto-unload |
@@ -51,6 +53,43 @@ Open the dashboard, optionally fill in guidance (genre, BPM, mood, …), and fli
 | `server.port` | Dashboard/API port |
 
 The Qwen system prompt lives in `server/prompts/system-prompt.md` — edit it freely; it's read fresh on every generation.
+
+## Songwriter backends
+
+`llm.backend` selects who runs Qwen for the songwriting step:
+
+- **`"lmstudio"`** (default) — the external LM Studio server, exactly as before.
+- **`"llamacpp"`** — Muse spawns its own `llama-server` per writing session and kills it afterwards (which doubles as the VRAM handoff to ComfyUI). Set `llamacpp.model` to your GGUF path and `llamacpp.extraArgs` to your usual llama.cpp flags (e.g. `["-ngl", "99", "--n-cpu-moe", "40"]` to keep MoE experts in RAM on a 16 GB card). `llamacpp.serverBin` points at the binary — built locally from source with CUDA:
+
+  ```bash
+  git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
+  cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
+        -DCMAKE_CUDA_ARCHITECTURES=120 -DLLAMA_CURL=OFF   # 120 = RTX 5080 (Blackwell)
+  cmake --build build --config Release --target llama-server -j
+  ```
+  (`-DCMAKE_CUDA_COMPILER` matters on Ubuntu: CMake otherwise picks apt's old `/usr/bin/nvcc`, which fails against gcc 13.) Server logs land in `data/llama-server.log`.
+
+## j-lens concept injection (llamacpp backend only)
+
+With `llamacpp.jlens.enabled`, each writing session injects 1–2 concepts directly into the model's residual stream while it writes, via a control vector derived from a fitted [Jacobian lens](https://github.com/anthropics/jacobian-lens): for concept word *w* and lens Jacobian `J_l`, the injected direction solves `J_l x ≈ u_w` (ridge-regularized), i.e. "the layer-l direction whose average forward effect is *saying w*".
+
+One-time setup:
+
+```bash
+uv venv tools/.venv && uv pip install --python tools/.venv/bin/python -r tools/requirements.txt
+tools/.venv/bin/python tools/jlens_precompute.py \
+    --lens /path/to/lens.pt --out data/jlens/deck.npz
+```
+
+`jlens_precompute.py` fetches only the tokenizer and the needed `lm_head` rows from the HF model repo (KBs, via range requests) and solves pullback vectors for every word in `tools/jlens_wordlist.txt` (~150 curated concept words — edit it, then re-run). It also writes `deck-ainv.npy`, a ~640 MB per-layer solver cache. Use `--inspect` to dump the lens file structure if loading fails.
+
+**The deck is self-healing**: pin a concept that isn't in the deck and the server solves it on the fly (`jlens_make_cv.py --auto-add` → one small HF fetch + cached solves, a few seconds) and appends it to the deck permanently. Words added this way are pinned-only — they don't join the random rotation unless you also add them to the wordlist. Manual equivalent: `jlens_precompute.py --lens … --out data/jlens/deck.npz --add gasoline,asphalt`.
+
+Injection is **opt-in per session**: with the dashboard's **Concept seeds** field empty, songs generate untouched. Pin concepts (`ocean, rust:0.2` — strengths optional) or type the literal word `random` to draw `conceptsPerSession` words from the wordlist; Muse then builds `data/jlens/current.gguf` via `tools/jlens_make_cv.py` and passes it to llama-server as `--control-vector`. Knobs in `llamacpp.jlens`: `conceptsPerSession`, `strengthRange` (random per-concept strength), `layerRange` (which lens layers to inject), `mentionInPrompt` (also name the concepts in the prompt). Concepts appear as chips on drafts and in the engine status ("Injecting: ocean ×0.25").
+
+**Calibration (measured on this model):** injection strength compounds across layers, and the dose–response ramp is steep. On the mid band (layers 12–20), ~**0.15–0.3** per concept flavors the song's imagery while staying coherent (the shipped default); ~0.5 degrades structure; on the wide band (8–30) use ~0.05–0.12 instead. Anything near 1+ makes the model literally chant the concept word. If a draft comes out as word salad, the status chips tell you which concepts/strengths to dial down.
+
+On the lmstudio backend, pinned Concept seeds still work as prompt-level seeds (no injection).
 
 If your LM Studio server requires an API key, put it in a `.env` file at the project root (see `.env.example`): `LLM_API_KEY=...`. It's sent as an `Authorization: Bearer` header on chat requests; a real environment variable with the same name takes precedence over `.env`.
 

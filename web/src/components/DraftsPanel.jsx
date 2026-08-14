@@ -56,6 +56,18 @@ function DraftItem({ draft, index, open, onToggle }) {
           <div className="row-name">
             {buf.name || 'Untitled'}
             {index === 0 && <span className="draft-next-tag">next up</span>}
+            {draft.concepts?.map((c) => (
+              <span
+                key={c.word}
+                className={`concept-chip ${draft.injected ? 'injected' : ''}`}
+                title={
+                  (draft.injected ? 'j-lens injected' : 'prompt seed') +
+                  (c.strength != null ? ` ×${c.strength}` : '')
+                }
+              >
+                {c.word}
+              </span>
+            ))}
           </div>
           {!open && <div className="row-caption">{buf.caption}</div>}
         </div>

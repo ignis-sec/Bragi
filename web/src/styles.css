@@ -575,6 +575,29 @@ textarea {
   padding: 4px 12px 14px;
 }
 
+.concept-chip {
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #2a2a2a;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  vertical-align: 1px;
+}
+
+.concept-chip.injected {
+  background: rgba(94, 114, 235, 0.18);
+  color: #9caaf5;
+}
+
+.status-concepts {
+  color: #9caaf5;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 .draft-fields {
   display: flex;
   flex-direction: column;

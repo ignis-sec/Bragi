@@ -1,25 +1,34 @@
 import crypto from 'node:crypto';
-import { generateSongMeta, unloadModel } from './lmstudio.js';
 import { renderSong, freeComfy } from './comfyui.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The pipeline keeps a queue of editable drafts ahead of ComfyUI:
 //
-//   [free ComfyUI VRAM] -> [Qwen tops drafts up to lookahead + 1] -> [unload Qwen]
-//        -> [ComfyUI renders the oldest draft]
+//   [free ComfyUI VRAM] -> [songwriter session: top drafts up to lookahead + 1]
+//        -> [stop/unload songwriter] -> [ComfyUI renders the oldest draft]
 //
 // The pool is refilled every time a render finishes (before the next one
 // starts), writing however many drafts are missing — so even after deletes or
 // rewrites, `draftLookahead` drafts stay editable during the whole render. All
 // writing happens between renders, so the GPU never holds both models.
+//
+// A "songwriter session" is LM Studio (loaded/unloaded around the batch) or a
+// llama-server process (spawned/killed around it), optionally with a j-lens
+// control vector injecting this session's concepts into the residual stream.
 export class Engine {
-  constructor(store, config) {
+  constructor(store, config, llm) {
     this.store = store;
     this.config = config;
+    this.llm = llm;
     this.running = false;
-    this.writing = false; // a Qwen call is in flight
+    this.writing = false; // a songwriter call is in flight
+    this.inSession = false; // a songwriter session (begin..end) is active
     this.renderAbort = null; // AbortController while ComfyUI is rendering
+  }
+
+  get draftTarget() {
+    return this.config.generation.draftLookahead ?? 3;
   }
 
   // Cancel the render in progress; the half-made song is discarded.
@@ -28,10 +37,6 @@ export class Engine {
       throw new Error('Nothing is rendering right now.');
     }
     this.renderAbort.abort();
-  }
-
-  get draftTarget() {
-    return this.config.generation.draftLookahead ?? 3;
   }
 
   setLoop(enabled) {
@@ -62,14 +67,39 @@ export class Engine {
         ...state.songs.slice(-8).map((s) => ({ name: s.name, caption: s.caption })),
         ...state.drafts.map((d) => ({ name: d.name, caption: d.caption })),
       ];
-      const meta = await generateSongMeta(this.config, state.guidance, recent);
-      return { id: crypto.randomUUID(), ...meta, createdAt: Date.now() };
+      const meta = await this.llm.writeSong(state.guidance, recent);
+      return {
+        id: crypto.randomUUID(),
+        ...meta,
+        concepts: state.session?.concepts ?? null,
+        injected: state.session?.injected ?? false,
+        createdAt: Date.now(),
+      };
     } finally {
       this.writing = false;
     }
   }
 
-  // Fill the draft queue up to `total`, one Qwen call at a time.
+  async beginSession() {
+    const { state } = this.store;
+    const info = await this.llm.begin(state.guidance);
+    this.inSession = true;
+    state.session = {
+      backend: this.llm.name,
+      concepts: info.concepts ?? null,
+      injected: info.injected ?? false,
+    };
+    this.store.touch();
+  }
+
+  async endSession() {
+    this.inSession = false;
+    this.store.state.session = null;
+    await this.llm.end().catch((err) => console.warn('[engine] session end:', err.message));
+    this.store.touch();
+  }
+
+  // Fill the draft queue up to `total`, one songwriter call at a time.
   async topUpDrafts(total) {
     const { state } = this.store;
     while (state.loopEnabled && state.drafts.length < total) {
@@ -90,22 +120,25 @@ export class Engine {
 
   // Manual "reroll" of one draft from the dashboard.
   async regenerateDraft(id) {
-    if (this.writing) {
+    if (this.writing || this.inSession) {
       throw new Error('The songwriter is already working — try again in a moment.');
     }
     const { state } = this.store;
-    const index = state.drafts.findIndex((d) => d.id === id);
-    if (index === -1) throw new Error('That draft no longer exists.');
+    if (!state.drafts.some((d) => d.id === id)) throw new Error('That draft no longer exists.');
     // Free ComfyUI's VRAM first — unless it's mid-render and actually using it.
     if (!state.generating) await freeComfy(this.config);
-    const draft = await this.makeDraft();
-    // The draft may have moved (or been dispatched) while Qwen was writing.
-    const nowIndex = state.drafts.findIndex((d) => d.id === id);
-    if (nowIndex === -1) throw new Error('That draft was already sent to ComfyUI.');
-    state.drafts[nowIndex] = draft;
-    this.store.touch();
-    await unloadModel(this.config);
-    return draft;
+    await this.beginSession();
+    try {
+      const draft = await this.makeDraft();
+      // The draft may have moved (or been dispatched) while the LLM wrote.
+      const nowIndex = state.drafts.findIndex((d) => d.id === id);
+      if (nowIndex === -1) throw new Error('That draft was already sent to ComfyUI.');
+      state.drafts[nowIndex] = draft;
+      this.store.touch();
+      return draft;
+    } finally {
+      await this.endSession();
+    }
   }
 
   async run() {
@@ -124,13 +157,18 @@ export class Engine {
           // Refill the pool to lookahead + 1: the extra one is dispatched to
           // ComfyUI right below, leaving `draftTarget` drafts waiting and
           // editable for the whole render. (Free ComfyUI's VRAM first —
-          // mirror of the Qwen unload.)
+          // mirror of the songwriter unload.)
           if (state.drafts.length < this.draftTarget + 1) {
-            this.setPhase('unloading-comfy', 'Freeing VRAM for Qwen');
+            this.setPhase('unloading-comfy', 'Freeing VRAM for the songwriter');
             await freeComfy(this.config);
-            await this.topUpDrafts(this.draftTarget + 1);
-            this.setPhase('unloading-llm', 'Freeing VRAM for ComfyUI');
-            await unloadModel(this.config);
+            this.setPhase('starting-llm');
+            await this.beginSession();
+            try {
+              await this.topUpDrafts(this.draftTarget + 1);
+            } finally {
+              this.setPhase('unloading-llm', 'Freeing VRAM for ComfyUI');
+              await this.endSession();
+            }
           }
           if (!state.loopEnabled) break;
           if (!state.drafts.length) continue; // top-up interrupted
@@ -152,6 +190,8 @@ export class Engine {
             name: dispatching.name,
             caption: dispatching.caption,
             lyrics: dispatching.lyrics,
+            concepts: dispatching.concepts ?? null,
+            injected: dispatching.injected ?? false,
             file,
             createdAt: dispatching.createdAt,
             readyAt: Date.now(),

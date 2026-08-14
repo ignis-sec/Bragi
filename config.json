@@ -2,6 +2,31 @@
   "server": {
     "port": 7700
   },
+  "llm": {
+    "backend": "llamacpp"
+  },
+  "llamacpp": {
+    "serverBin": "/home/ignis/Repositories/llama.cpp/build/bin/llama-server",
+    "model": "./models/llm/Qwen3.6-35B-A3B-Q4_K_M.gguf",
+    "port": 8080,
+    "ctxSize": 16384,
+    "temperature": 0.9,
+    "extraArgs": ["-ngl", "99", "--n-cpu-moe", "40"],
+    "startupTimeoutSec": 180,
+    "jlens": {
+      "enabled": true,
+      "lens": "./models/j-lens/jlens-qwen3-6-35b-a3b.pt",
+      "hfModel": "Qwen/Qwen3.6-35B-A3B",
+      "deck": "./data/jlens/deck.npz",
+      "wordlist": "./tools/jlens_wordlist.txt",
+      "python": "./tools/.venv/bin/python",
+      "conceptsPerSession": 2,
+      "strengthRange": [0.15, 0.3],
+      "layerRange": [12, 20],
+      "layerOffset": 0,
+      "mentionInPrompt": true
+    }
+  },
   "lmstudio": {
     "baseUrl": "http://127.0.0.1:1234",
     "model": "qwen/qwen3.6-35b-a3b",

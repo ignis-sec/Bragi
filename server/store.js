@@ -1,14 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
-import { ROOT, SONGS_DIR } from './config.js';
+import { ROOT, SONGS_DIR, DATA_DIR } from './config.js';
 import { songFilename } from './comfyui.js';
 
 const UUID_FILE_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\w+$/i;
 
-export { ROOT, SONGS_DIR };
-export const DATA_DIR = path.join(ROOT, 'data');
+export { ROOT, SONGS_DIR, DATA_DIR };
 const LEGACY_AUDIO_DIR = path.join(DATA_DIR, 'audio');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
@@ -20,6 +19,7 @@ const EMPTY_GUIDANCE = {
   vocals: '',
   language: '',
   extra: '',
+  concepts: '',
 };
 
 const DEFAULT_SETTINGS = {
@@ -44,6 +44,8 @@ export class Store extends EventEmitter {
       drafts: [],
       // The song currently rendering in ComfyUI.
       generating: null,
+      // Active songwriter session: { backend, concepts, injected } | null.
+      session: null,
       // Library of finished songs, oldest first.
       songs: [],
       // Ordered ids of finished songs waiting to be played.
