@@ -1,0 +1,26 @@
+{
+  "server": {
+    "port": 7700
+  },
+  "lmstudio": {
+    "baseUrl": "http://127.0.0.1:1234",
+    "model": "qwen/qwen3.6-35b-a3b",
+    "temperature": 0.9,
+    "ttlSeconds": 120,
+    "unload": "cli"
+  },
+  "comfyui": {
+    "baseUrl": "http://127.0.0.1:8188",
+    "workflow": "./audio_minimax_music_3.json",
+    "pollIntervalMs": 3000,
+    "timeoutMinutes": 30,
+    "freeWaitMs": 5000
+  },
+  "generation": {
+    "maxQueuedSongs": 3,
+    "draftLookahead": 3
+  },
+  "storage": {
+    "songsDir": "./songs"
+  }
+}
