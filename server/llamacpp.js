@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { ROOT, DATA_DIR } from './config.js';
+import { logEvent } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,6 +63,7 @@ export class LlamaCppBackend {
       '--concepts', concepts.map((c) => `${c.word}:${c.strength}`).join(','),
       '--out', out,
     ];
+    logEvent('jlens', 'building control vector', { concepts, layerRange: j.layerRange });
     if (j.layerRange) args.push('--layers', `${j.layerRange[0]}-${j.layerRange[1]}`);
     if (j.layerOffset) args.push('--layer-offset', String(j.layerOffset));
     // Self-healing: pinned concepts missing from the deck get solved and
@@ -71,9 +73,14 @@ export class LlamaCppBackend {
       if (j.hfModel) args.push('--hf-model', j.hfModel);
     }
     await new Promise((resolve, reject) => {
-      execFile(python, args, (err, _stdout, stderr) => {
-        if (err) reject(new Error(`jlens_make_cv failed: ${(stderr || err.message).trim()}`));
-        else resolve();
+      execFile(python, args, (err, stdout, stderr) => {
+        if (err) {
+          logEvent('jlens', 'make_cv FAILED', { stderr: (stderr || err.message).trim() });
+          reject(new Error(`jlens_make_cv failed: ${(stderr || err.message).trim()}`));
+        } else {
+          logEvent('jlens', 'make_cv ok', { stdout: stdout.trim() });
+          resolve();
+        }
       });
     });
     return out;
@@ -95,6 +102,8 @@ export class LlamaCppBackend {
     const logPath = path.join(DATA_DIR, 'llama-server.log');
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
     logStream.write(`\n--- ${new Date().toISOString()} ${cfg.serverBin ?? 'llama-server'} ${args.join(' ')}\n`);
+    logEvent('llamacpp', `spawning ${cfg.serverBin ?? 'llama-server'}`, { args });
+    const t0 = Date.now();
     const proc = spawn(cfg.serverBin ?? 'llama-server', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -115,7 +124,10 @@ export class LlamaCppBackend {
       }
       try {
         const res = await fetch(`${this.baseUrl}/health`);
-        if (res.ok) return;
+        if (res.ok) {
+          logEvent('llamacpp', `healthy in ${Math.round((Date.now() - t0) / 1000)}s`);
+          return;
+        }
       } catch {
         /* not up yet */
       }
@@ -129,6 +141,7 @@ export class LlamaCppBackend {
     const proc = this.proc;
     this.proc = null;
     if (!proc || proc.exitCode !== null) return;
+    logEvent('llamacpp', 'stopping llama-server');
     await new Promise((resolve) => {
       const hardKill = setTimeout(() => proc.kill('SIGKILL'), 10_000);
       proc.on('exit', () => {

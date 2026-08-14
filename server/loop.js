@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { renderSong, freeComfy } from './comfyui.js';
 import { createLLM } from './llm.js';
+import { logEvent } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -50,6 +51,7 @@ export class Engine {
   }
 
   setPhase(phase, detail = null) {
+    logEvent('engine', `phase: ${phase}${detail ? ` — ${detail}` : ''}`);
     this.store.state.engine = { phase, detail, since: Date.now() };
     this.store.touch();
   }
@@ -91,12 +93,14 @@ export class Engine {
       concepts: info.concepts ?? null,
       injected: info.injected ?? false,
     };
+    logEvent('engine', `songwriter session begin (${this.llm.name})`, state.session);
     this.store.touch();
   }
 
   async endSession() {
     this.inSession = false;
     this.store.state.session = null;
+    logEvent('engine', 'songwriter session end');
     await this.llm.end().catch((err) => console.warn('[engine] session end:', err.message));
     this.store.touch();
   }
@@ -107,7 +111,9 @@ export class Engine {
     while (state.loopEnabled && state.drafts.length < total) {
       this.setPhase('writing-draft', `Writing drafts (${state.drafts.length + 1}/${total})`);
       try {
-        state.drafts.push(await this.makeDraft());
+        const draft = await this.makeDraft();
+        logEvent('engine', `draft written: "${draft.name}"`, { caption: draft.caption });
+        state.drafts.push(draft);
       } catch (err) {
         // With at least one draft in hand, render it rather than stalling.
         if (state.drafts.length) {
@@ -187,6 +193,7 @@ export class Engine {
           });
           this.renderAbort = null;
 
+          logEvent('engine', `song ready: "${dispatching.name}" -> ${file}`);
           state.songs.push({
             id: dispatching.id,
             name: dispatching.name,
@@ -214,6 +221,7 @@ export class Engine {
             continue;
           }
           console.error('[engine]', err.message);
+          logEvent('engine', `ERROR: ${err.message}`);
           state.lastError = String(err.message ?? err);
           state.generating = null;
           // Don't lose a song that failed to render — put it back in front.

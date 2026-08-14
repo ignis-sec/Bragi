@@ -4,12 +4,30 @@ import express from 'express';
 import { config, saveConfig, ROOT, SONGS_DIR } from './config.js';
 import { Store } from './store.js';
 import { Engine } from './loop.js';
+import { logEvent, getLogs, clearLogs } from './logger.js';
 
 const store = new Store();
 const engine = new Engine(store, config);
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+
+// Dashboard API request logging ("http" category). SSE and the log poller
+// itself are excluded to keep the stream readable.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api') || req.path === '/api/events' || req.path.startsWith('/api/logs')) {
+    return next();
+  }
+  const t0 = Date.now();
+  res.on('finish', () => {
+    logEvent(
+      'http',
+      `${req.method} ${req.path} -> ${res.statusCode} (${Date.now() - t0}ms)`,
+      req.method === 'GET' || req.method === 'DELETE' ? undefined : req.body,
+    );
+  });
+  next();
+});
 
 // ---- state ----
 
@@ -29,6 +47,18 @@ app.get('/api/events', (req, res) => {
     clearInterval(heartbeat);
     store.off('change', send);
   });
+});
+
+// ---- logs (settings page viewer) ----
+
+app.get('/api/logs', (req, res) => {
+  const entries = getLogs(Number(req.query.since ?? 0));
+  res.json({ entries, latest: entries.length ? entries[entries.length - 1].id : Number(req.query.since ?? 0) });
+});
+
+app.post('/api/logs/clear', (req, res) => {
+  clearLogs();
+  res.json({ ok: true });
 });
 
 // ---- configuration (settings page) ----

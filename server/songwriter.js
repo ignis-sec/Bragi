@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { logEvent } from './logger.js';
 
 const PROMPT_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -180,6 +181,14 @@ export async function requestSong({
   if (sampling.repeatPenalty != null) base.repeat_penalty = sampling.repeatPenalty;
   if (ttl) base.ttl = ttl; // LM Studio JIT auto-unload; ignored elsewhere
 
+  logEvent('prompts', `songwriter request -> ${baseUrl}`, {
+    model,
+    sampling: { ...base, messages: undefined },
+    system: messages[0].content,
+    user: messages[1].content,
+  });
+  const t0 = Date.now();
+
   let { res, text } = await send({
     ...base,
     tools: [SUBMIT_SONG_TOOL],
@@ -189,6 +198,7 @@ export async function requestSong({
   });
   if (res.status === 400 && /tool/i.test(text ?? '')) {
     // Server doesn't support tools — ask for bare JSON instead.
+    logEvent('llmResponses', `tools rejected (${res.status}) — retrying without tools`, { text });
     const jsonMessages = [
       {
         role: 'system',
@@ -199,10 +209,15 @@ export async function requestSong({
     ({ res, text } = await send({ ...base, messages: jsonMessages }));
   }
   if (!res.ok) {
+    logEvent('llmResponses', `songwriter request FAILED (${res.status})`, { text });
     throw new Error(`Songwriter request failed (${res.status}): ${(text ?? '').slice(0, 300)}`);
   }
 
   const data = await res.json();
+  logEvent('llmResponses', `songwriter response in ${Date.now() - t0}ms`, {
+    message: data.choices?.[0]?.message,
+    usage: data.usage,
+  });
   const args = parseSongFromMessage(data.choices?.[0]?.message);
   if (!args) throw new Error('The songwriter did not return a submit_song call');
 

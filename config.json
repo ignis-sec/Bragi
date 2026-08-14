@@ -60,7 +60,7 @@
     "timeoutMinutes": 30,
     "freeWaitMs": 5000,
     "workflowOverrides": {
-      "maxDuration": 200,
+      "maxDuration": 400,
       "steps": 30,
       "cfg": 1.7,
       "encodeCfgScale": 1.7,
@@ -78,5 +78,18 @@
   },
   "storage": {
     "songsDir": "./songs"
+  },
+  "logging": {
+    "toFile": true,
+    "file": "./data/muse.log",
+    "categories": {
+      "engine": true,
+      "prompts": false,
+      "llmResponses": false,
+      "comfy": false,
+      "jlens": true,
+      "llamacpp": false,
+      "http": false
+    }
   }
 }

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { ROOT, SONGS_DIR } from './config.js';
+import { logEvent } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -105,6 +106,7 @@ export async function freeComfy(config) {
       body: JSON.stringify({ unload_models: true, free_memory: true }),
     });
     if (!res.ok) throw new Error(`status ${res.status}`);
+    logEvent('comfy', 'POST /free ok — waiting for VRAM to settle');
     // The unload runs in ComfyUI's executor loop — give the VRAM a moment to
     // actually come back before the LLM tries to claim it.
     await sleep(config.comfyui.freeWaitMs ?? 5000);
@@ -142,14 +144,21 @@ export async function renderSong(config, { name, caption, lyrics }, { signal } =
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    logEvent('comfy', `workflow REJECTED (${res.status})`, { text });
     throw new Error(`ComfyUI rejected the workflow (${res.status}): ${text.slice(0, 400)}`);
   }
   const { prompt_id: promptId } = await res.json();
   if (!promptId) throw new Error('ComfyUI did not return a prompt_id');
+  logEvent('comfy', `dispatched "${name}" (prompt_id ${promptId})`, {
+    caption,
+    lyricsChars: lyrics?.length,
+    overrides: cfg.workflowOverrides,
+  });
 
   const deadline = Date.now() + (cfg.timeoutMinutes ?? 30) * 60_000;
   while (true) {
     if (signal?.aborted) {
+      logEvent('comfy', `cancelling render (prompt_id ${promptId})`);
       await cancelPrompt(cfg, promptId);
       const err = new Error('Render cancelled');
       err.cancelled = true;
@@ -165,11 +174,13 @@ export async function renderSong(config, { name, caption, lyrics }, { signal } =
     if (!entry) continue; // still queued or running
 
     if (entry.status?.status_str === 'error') {
+      logEvent('comfy', `render FAILED (prompt_id ${promptId})`, entry.status);
       throw new Error(`ComfyUI failed: ${comfyErrorMessage(entry)}`);
     }
     if (entry.status?.completed || Object.keys(entry.outputs ?? {}).length) {
       const audio = findAudioOutput(entry.outputs);
       if (!audio) throw new Error('ComfyUI finished but produced no audio output');
+      logEvent('comfy', `render complete (prompt_id ${promptId})`, { audio });
       return await download(cfg, audio, name);
     }
   }

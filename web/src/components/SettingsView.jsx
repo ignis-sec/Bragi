@@ -1,5 +1,29 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiText } from '../api.js';
+
+const LOG_CATEGORIES = [
+  { key: 'engine', hint: 'Loop lifecycle: phases, sessions, drafts, errors' },
+  { key: 'prompts', hint: 'Full prompts sent to the songwriter LLM' },
+  { key: 'llmResponses', hint: 'Raw LLM responses (tool calls, content, usage)' },
+  { key: 'comfy', hint: 'ComfyUI dispatches, renders, /free calls' },
+  { key: 'jlens', hint: 'Concept picks, control-vector builds, auto-adds' },
+  { key: 'llamacpp', hint: 'llama-server spawn/health/stop' },
+  { key: 'http', hint: 'Dashboard API requests and bodies' },
+];
+
+const LOGGING_SECTION = {
+  title: 'Log categories',
+  fields: [
+    { path: 'logging.toFile', label: 'Also write to file', type: 'bool' },
+    { path: 'logging.file', label: 'Log file', type: 'text' },
+    ...LOG_CATEGORIES.map(({ key, hint }) => ({
+      path: `logging.categories.${key}`,
+      label: key,
+      type: 'bool',
+      hint,
+    })),
+  ],
+};
 
 // Schema-driven settings form. Each field maps a dotted config path to an
 // input. Types: text, number, bool, select, args (space-separated -> array).
@@ -191,11 +215,114 @@ function PromptEditor() {
   );
 }
 
+function LogViewer() {
+  const [entries, setEntries] = useState([]);
+  const [filter, setFilter] = useState(null); // category or null = all
+  const [paused, setPaused] = useState(false);
+  const latestRef = useRef(0);
+  const scrollRef = useRef(null);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      if (!alive || pausedRef.current) return;
+      try {
+        const { entries: fresh } = await api(`/api/logs?since=${latestRef.current}`);
+        if (fresh.length && alive) {
+          latestRef.current = fresh[fresh.length - 1].id;
+          setEntries((prev) => [...prev, ...fresh].slice(-500));
+        }
+      } catch {
+        /* server briefly away — keep polling */
+      }
+    };
+    poll();
+    const timer = setInterval(poll, 2000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [entries, filter]);
+
+  const clear = async () => {
+    await api('/api/logs/clear', { method: 'POST' }).catch(() => {});
+    setEntries([]);
+  };
+
+  const shown = filter ? entries.filter((e) => e.cat === filter) : entries;
+  const cats = ['all', ...LOG_CATEGORIES.map((c) => c.key)];
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <h2>Live log</h2>
+          <div className="card-sub">
+            Last 500 entries from enabled categories. Save category changes above to take effect.
+          </div>
+        </div>
+        <div className="card-head-actions">
+          <button className="pill-btn" onClick={() => setPaused(!paused)}>
+            {paused ? 'Resume' : 'Pause'}
+          </button>
+          <button className="pill-btn" onClick={clear}>
+            Clear
+          </button>
+        </div>
+      </div>
+      <div className="log-filters">
+        {cats.map((c) => (
+          <button
+            key={c}
+            className={`log-chip cat-${c} ${(filter ?? 'all') === c ? 'active' : ''}`}
+            onClick={() => setFilter(c === 'all' ? null : c)}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+      <div className="log-scroll" ref={scrollRef}>
+        {shown.length === 0 ? (
+          <div className="draft-empty">
+            Nothing yet — enable categories above and let the loop run.
+          </div>
+        ) : (
+          shown.map((e) => (
+            <div className="log-row" key={e.id}>
+              <span className="log-time">
+                {new Date(e.ts).toLocaleTimeString('en-GB')}
+              </span>
+              <span className={`log-chip cat-${e.cat}`}>{e.cat}</span>
+              <div className="log-body">
+                <div className="log-msg">{e.msg}</div>
+                {e.data && (
+                  <details>
+                    <summary>data</summary>
+                    <pre>{e.data}</pre>
+                  </details>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function SettingsView() {
   const [saved, setSaved] = useState(null); // config as on the server
   const [edits, setEdits] = useState({}); // dotted path -> new value
   const [status, setStatus] = useState('');
   const [restartNeeded, setRestartNeeded] = useState(false);
+  const [tab, setTab] = useState('general');
 
   useEffect(() => {
     api('/api/config').then(setSaved).catch(() => setStatus('failed to load config'));
@@ -225,6 +352,14 @@ export default function SettingsView() {
       <div className="settings-bar card">
         <div>
           <h2>Settings</h2>
+          <div className="settings-tabs">
+            <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>
+              General
+            </button>
+            <button className={tab === 'logging' ? 'active' : ''} onClick={() => setTab('logging')}>
+              Logging
+            </button>
+          </div>
           <div className="card-sub">
             Config changes hot-apply to the next writing session / render.
             {restartNeeded && (
@@ -245,7 +380,7 @@ export default function SettingsView() {
         </div>
       </div>
 
-      {sections.map((section) => (
+      {(tab === 'general' ? sections : [LOGGING_SECTION]).map((section) => (
         <section className="card" key={section.title}>
           <div className="card-head">
             <h2>{section.title}</h2>
@@ -263,7 +398,8 @@ export default function SettingsView() {
         </section>
       ))}
 
-      <PromptEditor />
+      {tab === 'general' && <PromptEditor />}
+      {tab === 'logging' && <LogViewer />}
     </div>
   );
 }
