@@ -82,6 +82,14 @@ export const ClockIcon = (p) => (
   </Svg>
 );
 
+export const DownloadIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M12 3v11" />
+    <path d="m7 10 5 5 5-5" />
+    <path d="M4 20h16" />
+  </Svg>
+);
+
 export const CrossIcon = (p) => (
   <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2.2">
     <path d="M6 6l12 12M18 6L6 18" />

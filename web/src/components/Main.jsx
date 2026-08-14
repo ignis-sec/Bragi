@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
 import SongRow from './SongRow.jsx';
-import DraftEditor from './DraftEditor.jsx';
+import DraftsPanel from './DraftsPanel.jsx';
 
 function Lyrics({ song }) {
   if (!song) return null;
@@ -161,7 +161,7 @@ export default function Main({ state, view, player }) {
           </div>
           <div className="home-col">
             <GeneratingCard state={state} />
-            <DraftEditor state={state} />
+            <DraftsPanel state={state} />
             <QueueCard player={player} />
           </div>
         </div>

@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { ROOT, SONGS_DIR } from './config.js';
+import { songFilename } from './comfyui.js';
+
+const UUID_FILE_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\w+$/i;
 
 export { ROOT, SONGS_DIR };
 export const DATA_DIR = path.join(ROOT, 'data');
@@ -62,20 +66,32 @@ export class Store extends EventEmitter {
       this.state.queue = saved.queue ?? [];
       this.state.history = saved.history ?? [];
       // Keep songs whose audio exists; migrate files from the legacy
-      // data/audio/<uuid>.mp3 layout into the songs folder.
+      // data/audio/<uuid>.mp3 layout into the songs folder, and give
+      // uuid-named files their proper song name.
       this.state.songs = this.state.songs.filter((s) => {
         if (!s?.file) return false;
-        if (fs.existsSync(path.join(SONGS_DIR, s.file))) return true;
-        const legacy = path.join(LEGACY_AUDIO_DIR, s.file);
-        if (fs.existsSync(legacy)) {
-          try {
-            fs.renameSync(legacy, path.join(SONGS_DIR, s.file));
-            return true;
-          } catch (err) {
-            console.warn(`[store] could not migrate ${s.file}:`, err.message);
+        let ok = fs.existsSync(path.join(SONGS_DIR, s.file));
+        if (!ok) {
+          const legacy = path.join(LEGACY_AUDIO_DIR, s.file);
+          if (fs.existsSync(legacy)) {
+            try {
+              fs.renameSync(legacy, path.join(SONGS_DIR, s.file));
+              ok = true;
+            } catch (err) {
+              console.warn(`[store] could not migrate ${s.file}:`, err.message);
+            }
           }
         }
-        return false;
+        if (ok && UUID_FILE_RE.test(s.file)) {
+          const nice = songFilename(s.name, path.extname(s.file));
+          try {
+            fs.renameSync(path.join(SONGS_DIR, s.file), path.join(SONGS_DIR, nice));
+            s.file = nice;
+          } catch (err) {
+            console.warn(`[store] could not rename ${s.file}:`, err.message);
+          }
+        }
+        return ok;
       });
       const ids = new Set(this.state.songs.map((s) => s.id));
       this.state.queue = this.state.queue.filter((id) => ids.has(id));

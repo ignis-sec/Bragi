@@ -6,7 +6,7 @@ import { ROOT, SONGS_DIR } from './config.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // "Neon Skyline" -> "Neon Skyline.mp3", deduped against existing files.
-function songFilename(name, ext) {
+export function songFilename(name, ext) {
   const base =
     String(name ?? '')
       .replace(/[/\\:*?"<>|\x00-\x1f]/g, '')

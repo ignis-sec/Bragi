@@ -1,7 +1,7 @@
 import React from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
-import { PlayIcon, HeartIcon, TrashIcon, CrossIcon, NoteIcon } from '../icons.jsx';
+import { PlayIcon, HeartIcon, TrashIcon, CrossIcon, NoteIcon, DownloadIcon } from '../icons.jsx';
 
 function timeAgo(ts) {
   if (!ts) return '';
@@ -44,6 +44,14 @@ export default function SongRow({ song, index, player, timestamp, onRemove, remo
         <button className="icon-btn" title="Play now" onClick={() => player.play(song)}>
           <PlayIcon size={16} />
         </button>
+        <a
+          className="icon-btn"
+          href={`/audio/${encodeURIComponent(song.file)}`}
+          download
+          title="Download mp3"
+        >
+          <DownloadIcon size={15} />
+        </a>
         {onRemove && (
           <button className="icon-btn" title="Remove" onClick={() => onRemove(song)}>
             {removeIcon === 'trash' ? <TrashIcon size={15} /> : <CrossIcon size={14} />}

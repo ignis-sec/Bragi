@@ -91,6 +91,20 @@ function GuidancePanel({ state }) {
   );
 }
 
+function ToggleRow({ title, hint, on, onToggle }) {
+  return (
+    <div className="loop-row">
+      <div>
+        <div className="panel-title">{title}</div>
+        <div className="g-hint">{hint}</div>
+      </div>
+      <button className={`switch ${on ? 'on' : ''}`} aria-label={`Toggle ${title}`} onClick={onToggle}>
+        <span className="knob" />
+      </button>
+    </div>
+  );
+}
+
 export default function Sidebar({ state, view, setView }) {
   const navItem = (id, icon, label) => (
     <button className={`nav-item ${view === id ? 'active' : ''}`} onClick={() => setView(id)}>
@@ -114,23 +128,38 @@ export default function Sidebar({ state, view, setView }) {
       </div>
 
       <div className="side-card grow">
-        <div className="loop-row">
-          <div>
-            <div className="panel-title">Generation loop</div>
-            <div className="g-hint">Keeps writing &amp; rendering new songs</div>
-          </div>
-          <button
-            className={`switch ${state.loopEnabled ? 'on' : ''}`}
-            aria-label="Toggle generation loop"
-            onClick={() =>
-              api('/api/loop', { method: 'POST', body: { enabled: !state.loopEnabled } }).catch(
-                () => {},
-              )
-            }
-          >
-            <span className="knob" />
-          </button>
-        </div>
+        <ToggleRow
+          title="Generation loop"
+          hint="Keeps writing &amp; rendering new songs"
+          on={state.loopEnabled}
+          onToggle={() =>
+            api('/api/loop', { method: 'POST', body: { enabled: !state.loopEnabled } }).catch(
+              () => {},
+            )
+          }
+        />
+        <ToggleRow
+          title="Autoplay"
+          hint="Start playing when a song hits the queue"
+          on={state.settings?.autoplay}
+          onToggle={() =>
+            api('/api/settings', {
+              method: 'PATCH',
+              body: { autoplay: !state.settings?.autoplay },
+            }).catch(() => {})
+          }
+        />
+        <ToggleRow
+          title="Pad from bookmarks"
+          hint="Empty queue? Play a random bookmarked song"
+          on={state.settings?.padFromBookmarks}
+          onToggle={() =>
+            api('/api/settings', {
+              method: 'PATCH',
+              body: { padFromBookmarks: !state.settings?.padFromBookmarks },
+            }).catch(() => {})
+          }
+        />
         <EngineStatus state={state} />
         <div className="divider" />
         <GuidancePanel state={state} />

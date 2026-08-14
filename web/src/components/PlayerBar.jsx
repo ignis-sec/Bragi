@@ -1,7 +1,7 @@
 import React from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
-import { PlayIcon, PauseIcon, NextIcon, PrevIcon, HeartIcon } from '../icons.jsx';
+import { PlayIcon, PauseIcon, NextIcon, PrevIcon, HeartIcon, DownloadIcon } from '../icons.jsx';
 
 function fmt(t) {
   if (!Number.isFinite(t)) return '0:00';
@@ -31,6 +31,14 @@ export default function PlayerBar({ player }) {
             >
               <HeartIcon filled={current.bookmarked} size={18} />
             </button>
+            <a
+              className="icon-btn"
+              href={`/audio/${encodeURIComponent(current.file)}`}
+              download
+              title="Download mp3"
+            >
+              <DownloadIcon size={17} />
+            </a>
           </>
         ) : (
           <div className="pb-caption">Nothing playing</div>
