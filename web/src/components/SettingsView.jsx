@@ -34,6 +34,7 @@ const SECTIONS = [
       { path: 'llm.backend', label: 'Backend', type: 'select', options: ['lmstudio', 'llamacpp'], hint: 'Applies from the next writing session' },
       { path: 'generation.draftLookahead', label: 'Draft lookahead', type: 'number', hint: 'Editable drafts kept waiting during renders' },
       { path: 'generation.maxQueuedSongs', label: 'Max queued songs', type: 'number', hint: 'Loop pauses when this many rendered songs wait' },
+      { path: 'generation.recentSongsInPrompt', label: 'Recent songs in prompt', type: 'bool', hint: 'List recent titles and ask for something clearly different' },
     ],
   },
   {

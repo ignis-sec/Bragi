@@ -49,6 +49,7 @@ Open the dashboard, optionally fill in guidance (genre, BPM, mood, …), and fli
 | `comfyui.freeWaitMs` | How long to wait after `POST /free` for VRAM to actually come back |
 | `generation.maxQueuedSongs` | The loop pauses when this many unplayed songs are queued |
 | `generation.draftLookahead` | How many drafts stay waiting/editable while a render runs (default 3). The pool is refilled to this size + 1 every time a render finishes, however many are missing |
+| `generation.recentSongsInPrompt` | List recent songs in the prompt with a "write something clearly different" instruction (default on; toggle in Settings) |
 | `storage.songsDir` | Folder where finished songs are saved, named `<Song Name>.mp3` |
 | `server.port` | Dashboard/API port |
 

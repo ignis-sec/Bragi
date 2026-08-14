@@ -66,10 +66,14 @@ export class Engine {
     this.writing = true;
     try {
       const { state } = this.store;
-      const recent = [
-        ...state.songs.slice(-8).map((s) => ({ name: s.name, caption: s.caption })),
-        ...state.drafts.map((d) => ({ name: d.name, caption: d.caption })),
-      ];
+      // Optionally list recent songs in the prompt with a "write something
+      // clearly different" instruction (Settings > Songwriter).
+      const recent = (this.config.generation.recentSongsInPrompt ?? true)
+        ? [
+            ...state.songs.slice(-8).map((s) => ({ name: s.name, caption: s.caption })),
+            ...state.drafts.map((d) => ({ name: d.name, caption: d.caption })),
+          ]
+        : [];
       const meta = await this.llm.writeSong(state.guidance, recent);
       return {
         id: crypto.randomUUID(),
