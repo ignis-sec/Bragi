@@ -2,7 +2,7 @@
 """Sparse semantic noise: a random *meaning-bearing* control vector.
 
 Samples K random common-word tokens from the model's full vocabulary, blends
-their unit unembedding rows with random signed weights, pulls the blend back
+their unit unembedding rows with random positive weights, pulls the blend back
 through the j-lens Jacobians, and writes a llama.cpp control-vector GGUF.
 Unlike isotropic activation noise (which is ~orthogonal to every feature and
 does nothing at safe norms), this tilts the whole session in a random but
@@ -129,9 +129,9 @@ def main():
     picks = rng.choice(len(cand["ids"]), size=args.tokens, replace=False)
     words = [cand["words"][i] for i in picks]
     ids = [cand["ids"][i] for i in picks]
-    weights = rng.uniform(-1.0, 1.0, size=args.tokens)
+    weights = rng.uniform(0.0, 1.0, size=args.tokens)
 
-    # Blend unit unembedding rows with signed weights -> one semantic direction.
+    # Blend unit unembedding rows with positive weights -> one semantic direction.
     U = lm_head[np.array(ids)].astype(np.float32)
     U /= np.linalg.norm(U, axis=1, keepdims=True) + 1e-8
     u = weights @ U

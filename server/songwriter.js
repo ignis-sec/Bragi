@@ -25,12 +25,12 @@ export const SUBMIT_SONG_TOOL = {
         caption: {
           type: 'string',
           description:
-            'One line of comma-separated music metadata tags: genre(s), mood, instruments, vocal type, "<number> bpm", production tags. Lowercase, no sentences.',
+            'Rich prose music description in three labeled paragraphs: "Global Metadata:" (genre/era, "<N> BPM", key/mode, energy arc, production character), "Vocal Details:" (voice, delivery, harmonies, where vocals appear), "Arrangement:" (instruments and a section-by-section walk-through). 100-250 words, producer-brief register — not a tag list.',
         },
         lyrics: {
           type: 'string',
           description:
-            'Full song lyrics with [intro]/[verse]/[pre-chorus]/[chorus]/[bridge]/[outro] structure tags on their own lines, blank line between sections.',
+            'Full song lyrics with Title Case structure tags on their own lines ([Intro], [Verse 1], [Pre-Chorus], [Chorus], [Guitar solo], [Bridge], [Outro]), blank line between sections. Every non-tag line is sung verbatim — no stage directions.',
         },
       },
       required: ['song_name', 'caption', 'lyrics'],
