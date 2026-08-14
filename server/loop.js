@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { renderSong, freeComfy } from './comfyui.js';
+import { createLLM } from './llm.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -17,10 +18,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // llama-server process (spawned/killed around it), optionally with a j-lens
 // control vector injecting this session's concepts into the residual stream.
 export class Engine {
-  constructor(store, config, llm) {
+  constructor(store, config) {
     this.store = store;
     this.config = config;
-    this.llm = llm;
+    this.llm = null; // created fresh at each session, so config edits hot-apply
     this.running = false;
     this.writing = false; // a songwriter call is in flight
     this.inSession = false; // a songwriter session (begin..end) is active
@@ -82,6 +83,7 @@ export class Engine {
 
   async beginSession() {
     const { state } = this.store;
+    this.llm = createLLM(this.config);
     const info = await this.llm.begin(state.guidance);
     this.inSession = true;
     state.session = {

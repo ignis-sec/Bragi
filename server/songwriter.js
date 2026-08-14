@@ -141,6 +141,7 @@ export async function requestSong({
   apiKey,
   model,
   temperature,
+  sampling = {},
   ttl,
   guidance,
   recentSongs,
@@ -165,7 +166,18 @@ export async function requestSong({
 
   // Cap output so a derailed generation (e.g. an overdosed j-lens injection
   // chanting one word) fails fast instead of rambling to the context limit.
-  const base = { model, messages, temperature: temperature ?? 0.9, max_tokens: 4096 };
+  const base = {
+    model,
+    messages,
+    temperature: sampling.temperature ?? temperature ?? 0.9,
+    max_tokens: 4096,
+  };
+  // Optional sampling knobs — only sent when set; unknown fields are ignored
+  // by servers that don't support them.
+  if (sampling.topP != null) base.top_p = sampling.topP;
+  if (sampling.topK != null) base.top_k = sampling.topK;
+  if (sampling.minP != null) base.min_p = sampling.minP;
+  if (sampling.repeatPenalty != null) base.repeat_penalty = sampling.repeatPenalty;
   if (ttl) base.ttl = ttl; // LM Studio JIT auto-unload; ignored elsewhere
 
   let { res, text } = await send({

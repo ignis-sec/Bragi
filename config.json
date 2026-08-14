@@ -11,7 +11,16 @@
     "port": 8080,
     "ctxSize": 16384,
     "temperature": 0.9,
-    "extraArgs": ["-ngl", "99", "--n-cpu-moe", "40"],
+    "topP": null,
+    "topK": null,
+    "minP": null,
+    "repeatPenalty": null,
+    "extraArgs": [
+      "-ngl",
+      "99",
+      "--n-cpu-moe",
+      "40"
+    ],
     "startupTimeoutSec": 180,
     "jlens": {
       "enabled": true,
@@ -21,16 +30,26 @@
       "wordlist": "./tools/jlens_wordlist.txt",
       "python": "./tools/.venv/bin/python",
       "conceptsPerSession": 2,
-      "strengthRange": [0.15, 0.3],
-      "layerRange": [12, 20],
+      "strengthRange": [
+        0.15,
+        0.3
+      ],
+      "layerRange": [
+        12,
+        20
+      ],
       "layerOffset": 0,
-      "mentionInPrompt": true
+      "mentionInPrompt": false
     }
   },
   "lmstudio": {
     "baseUrl": "http://127.0.0.1:1234",
     "model": "qwen/qwen3.6-35b-a3b",
     "temperature": 0.9,
+    "topP": null,
+    "topK": null,
+    "minP": null,
+    "repeatPenalty": null,
     "ttlSeconds": 120,
     "unload": "cli"
   },
@@ -39,7 +58,19 @@
     "workflow": "./audio_minimax_music_3.json",
     "pollIntervalMs": 3000,
     "timeoutMinutes": 30,
-    "freeWaitMs": 5000
+    "freeWaitMs": 5000,
+    "workflowOverrides": {
+      "maxDuration": 200,
+      "steps": 30,
+      "cfg": 1.7,
+      "encodeCfgScale": 1.7,
+      "encodeTopK": 50,
+      "samplerName": "euler",
+      "scheduler": "simple",
+      "unetName": "minimax_music3_dit_fp16.safetensors",
+      "clipName": "minimax_music3_text_encoder_pruned_int8_convrot.safetensors",
+      "vaeName": "minimax_music3_dav.safetensors"
+    }
   },
   "generation": {
     "maxQueuedSongs": 3,

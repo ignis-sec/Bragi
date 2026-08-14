@@ -50,12 +50,19 @@ class LlamaCppSession {
   }
 
   async writeSong(guidance, recentSongs) {
-    const j = this.config.llamacpp?.jlens ?? {};
+    const cfg = this.config.llamacpp ?? {};
+    const j = cfg.jlens ?? {};
     const mention = (j.mentionInPrompt ?? true) ? this.concepts : null;
     return requestSong({
       baseUrl: this.backend.baseUrl,
       model: 'muse', // llama-server serves a single model; the name is ignored
-      temperature: this.config.llamacpp?.temperature ?? 0.9,
+      sampling: {
+        temperature: cfg.temperature,
+        topP: cfg.topP,
+        topK: cfg.topK,
+        minP: cfg.minP,
+        repeatPenalty: cfg.repeatPenalty,
+      },
       guidance,
       recentSongs,
       concepts: mention,

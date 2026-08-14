@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { HomeIcon, ClockIcon, HeartIcon, NoteIcon } from '../icons.jsx';
+import { HomeIcon, ClockIcon, HeartIcon, NoteIcon, GearIcon } from '../icons.jsx';
 
 const PHASE_LABELS = {
   idle: 'Idle',
@@ -135,6 +135,7 @@ export default function Sidebar({ state, view, setView }) {
           {navItem('home', <HomeIcon size={20} />, 'Home')}
           {navItem('history', <ClockIcon size={20} />, 'History')}
           {navItem('bookmarks', <HeartIcon size={20} />, 'Bookmarks')}
+          {navItem('settings', <GearIcon size={20} />, 'Settings')}
         </nav>
       </div>
 

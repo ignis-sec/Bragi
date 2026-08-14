@@ -109,10 +109,16 @@ If your LM Studio server requires an API key, put it in a `.env` file at the pro
 - **History** — every finished/skipped play with timestamps.
 - **Bookmarks** — heart a song while it plays (player bar or any song row) to keep it out of the disposable churn; deletable with its audio file.
 
+## Settings page
+
+The **Settings** view (gear icon) edits everything live: songwriter backend and sampling (temperature, top_p, top_k, min_p, repeat_penalty for both backends), LM Studio / llama.cpp connection details, j-lens defaults (strength range, injection layer range, per-session concept count), ComfyUI connection, music generation parameters (max duration, diffusion steps, both CFG values, sampler, scheduler, encode top_k, and the three model filenames), queue/lookahead sizes, and the full Qwen system prompt.
+
+Changes write back to `config.json` and **hot-apply**: the engine reads config at use-time and creates a fresh songwriter session each cycle, so everything takes effect on the next writing session or render — except `server.port` and `storage.songsDir`, which are flagged in the UI as needing a restart. Music parameters are stored as `comfyui.workflowOverrides` and applied to the workflow at dispatch time (matched by node `class_type`), so your exported `audio_minimax_music_3.json` stays pristine as a template; blank override fields fall back to the template's values.
+
 ## Storage
 
 Finished songs are saved to `songs/<Song Name>.mp3` (configurable via `storage.songsDir`); the library/queue/history/settings live in `data/db.json`. Files from the old `data/audio/<uuid>.mp3` layout are migrated and renamed automatically on startup. Delete both to start fresh.
 
 ## API (all local)
 
-`GET /api/state` · `GET /api/events` (SSE) · `POST /api/loop {enabled}` · `POST /api/generating/cancel` · `PATCH /api/settings` · `PATCH /api/guidance` · `PATCH /api/drafts/:id` · `POST /api/drafts/:id/regenerate` · `DELETE /api/drafts/:id` · `POST /api/songs/:id/played` · `POST /api/songs/:id/bookmark` · `POST /api/queue/:id/remove` · `DELETE /api/songs/:id` · `GET /audio/<file>`
+`GET /api/state` · `GET /api/events` (SSE) · `GET|PATCH /api/config` (dotted-path map, e.g. `{"lmstudio.temperature": 0.8}`) · `GET|PUT /api/system-prompt` · `POST /api/loop {enabled}` · `POST /api/generating/cancel` · `PATCH /api/settings` · `PATCH /api/guidance` · `PATCH /api/drafts/:id` · `POST /api/drafts/:id/regenerate` · `DELETE /api/drafts/:id` · `POST /api/songs/:id/played` · `POST /api/songs/:id/bookmark` · `POST /api/queue/:id/remove` · `DELETE /api/songs/:id` · `GET /audio/<file>`

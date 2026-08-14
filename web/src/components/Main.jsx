@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import Art from './Art.jsx';
 import SongRow from './SongRow.jsx';
 import DraftsPanel from './DraftsPanel.jsx';
+import SettingsView from './SettingsView.jsx';
 import { CrossIcon } from '../icons.jsx';
 
 function Lyrics({ song }) {
@@ -188,6 +189,7 @@ export default function Main({ state, view, player }) {
       )}
       {view === 'history' && <HistoryView player={player} />}
       {view === 'bookmarks' && <BookmarksView state={state} player={player} />}
+      {view === 'settings' && <SettingsView />}
     </main>
   );
 }

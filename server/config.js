@@ -27,9 +27,13 @@ function loadDotEnv(file) {
 }
 loadDotEnv(path.join(ROOT, '.env'));
 
-export const config = JSON.parse(
-  fs.readFileSync(process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json'), 'utf8'),
-);
+export const CONFIG_PATH = process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json');
+export const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+
+// Persist the (mutated) in-memory config back to disk.
+export function saveConfig() {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+}
 
 export const DATA_DIR = path.join(ROOT, 'data');
 

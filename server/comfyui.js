@@ -32,6 +32,41 @@ export function substitute(node, vars) {
   return node;
 }
 
+// Apply settings-page overrides onto the workflow, matched by class_type so
+// node renumbering in a re-exported workflow doesn't break them. Only values
+// that are set (non-null, non-empty) override the template.
+export function applyOverrides(prompt, o = {}) {
+  const set = (inputs, key, value) => {
+    if (value !== null && value !== undefined && value !== '') inputs[key] = value;
+  };
+  for (const node of Object.values(prompt)) {
+    const inputs = node?.inputs;
+    if (!inputs) continue;
+    switch (node.class_type) {
+      case 'MiniMaxMusic3TextEncode':
+        set(inputs, 'max_duration', o.maxDuration);
+        set(inputs, 'cfg_scale', o.encodeCfgScale);
+        set(inputs, 'top_k', o.encodeTopK);
+        break;
+      case 'KSampler':
+        set(inputs, 'steps', o.steps);
+        set(inputs, 'cfg', o.cfg);
+        set(inputs, 'sampler_name', o.samplerName);
+        set(inputs, 'scheduler', o.scheduler);
+        break;
+      case 'UNETLoader':
+        set(inputs, 'unet_name', o.unetName);
+        break;
+      case 'CLIPLoader':
+        set(inputs, 'clip_name', o.clipName);
+        break;
+      case 'VAELoader':
+        set(inputs, 'vae_name', o.vaeName);
+        break;
+    }
+  }
+}
+
 // Fresh seed every run so identical prompts still give different songs.
 function randomizeSeeds(prompt) {
   for (const node of Object.values(prompt)) {
@@ -97,6 +132,7 @@ export async function renderSong(config, { name, caption, lyrics }, { signal } =
   const workflowPath = path.resolve(ROOT, cfg.workflow);
   const template = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
   const prompt = substitute(template, { caption, lyrics });
+  applyOverrides(prompt, cfg.workflowOverrides);
   randomizeSeeds(prompt);
 
   const res = await fetch(`${cfg.baseUrl}/prompt`, {
