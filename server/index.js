@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
-import { config, saveConfig, ROOT, SONGS_DIR } from './config.js';
+import { config, updateConfig, ROOT, SONGS_DIR } from './config.js';
 import { Store } from './store.js';
 import { Engine } from './loop.js';
 import { CoverEngine, COVERS_DIR } from './covers.js';
@@ -69,36 +69,18 @@ app.post('/api/logs/clear', (req, res) => {
 
 // Values that only take effect after a server restart.
 const RESTART_PATHS = ['server.port', 'storage.songsDir'];
-const BAD_SEGMENT = /^(__proto__|constructor|prototype)$/;
-
-function setConfigPath(target, dotted, value) {
-  const parts = dotted.split('.');
-  if (parts.some((p) => !p || BAD_SEGMENT.test(p))) {
-    throw new Error(`invalid config path: ${dotted}`);
-  }
-  let node = target;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const key = /^\d+$/.test(parts[i]) ? Number(parts[i]) : parts[i];
-    if (node[key] == null || typeof node[key] !== 'object') {
-      node[key] = /^\d+$/.test(parts[i + 1]) ? [] : {};
-    }
-    node = node[key];
-  }
-  const leaf = parts[parts.length - 1];
-  node[/^\d+$/.test(leaf) ? Number(leaf) : leaf] = value;
-}
 
 app.get('/api/config', (req, res) => res.json(config));
 
 // Body: { "lmstudio.temperature": 0.8, "llamacpp.jlens.layerRange.0": 10, ... }
-// Leaf values are mutated on the live config object, so most changes apply to
-// the next songwriter session / render without a restart.
+// Changes mutate the live config (hot-apply) and are persisted to the
+// database as overrides — config.json stays untouched as the defaults file.
 app.patch('/api/config', (req, res) => {
   const changes = req.body ?? {};
   const restartRequired = [];
   try {
-    for (const [dotted, value] of Object.entries(changes)) {
-      setConfigPath(config, dotted, value);
+    updateConfig(changes);
+    for (const dotted of Object.keys(changes)) {
       if (RESTART_PATHS.some((p) => dotted === p || dotted.startsWith(`${p}.`))) {
         restartRequired.push(dotted);
       }
@@ -106,7 +88,6 @@ app.patch('/api/config', (req, res) => {
   } catch (err) {
     return res.status(400).json({ error: String(err.message ?? err) });
   }
-  saveConfig();
   res.json({ ok: true, restartRequired });
 });
 

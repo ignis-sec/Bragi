@@ -374,7 +374,7 @@ export default function SettingsView() {
             </button>
           </div>
           <div className="card-sub">
-            Config changes hot-apply to the next writing session / render.
+            Changes hot-apply and are stored in the database; config.json holds the defaults.
             {restartNeeded && (
               <span className="status-error"> Some saved changes need a server restart.</span>
             )}

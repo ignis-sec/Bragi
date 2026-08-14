@@ -1,10 +1,54 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { ROOT, DATA_DIR, kvGet, kvSet } from './db.js';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export { ROOT, DATA_DIR };
 
-// Load ROOT/.env (KEY=VALUE lines) into process.env; real env vars win.
+// config.json holds DEFAULTS only — the app never writes it. Every change made
+// from the settings page is stored in the database as a dotted-path override
+// and applied on top of the defaults at boot (and live, via updateConfig).
+export const CONFIG_PATH = process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json');
+
+const BAD_SEGMENT = /^(__proto__|constructor|prototype)$/;
+
+export function setConfigPath(target, dotted, value) {
+  const parts = dotted.split('.');
+  if (parts.some((p) => !p || BAD_SEGMENT.test(p))) {
+    throw new Error(`invalid config path: ${dotted}`);
+  }
+  let node = target;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = /^\d+$/.test(parts[i]) ? Number(parts[i]) : parts[i];
+    if (node[key] == null || typeof node[key] !== 'object') {
+      node[key] = /^\d+$/.test(parts[i + 1]) ? [] : {};
+    }
+    node = node[key];
+  }
+  const leaf = parts[parts.length - 1];
+  node[/^\d+$/.test(leaf) ? Number(leaf) : leaf] = value;
+}
+
+export const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+
+const overrides = kvGet('configOverrides', {});
+for (const [dotted, value] of Object.entries(overrides)) {
+  try {
+    setConfigPath(config, dotted, value);
+  } catch (err) {
+    console.warn('[config] skipping stored override:', err.message);
+  }
+}
+
+// Apply a change-set to the live config and persist it as overrides.
+export function updateConfig(changes) {
+  for (const [dotted, value] of Object.entries(changes)) {
+    setConfigPath(config, dotted, value);
+    overrides[dotted] = value;
+  }
+  kvSet('configOverrides', overrides);
+}
+
+// Loading a dotted env file (.env) — real env vars win.
 function loadDotEnv(file) {
   let text;
   try {
@@ -27,16 +71,5 @@ function loadDotEnv(file) {
 }
 loadDotEnv(path.join(ROOT, '.env'));
 
-export const CONFIG_PATH = process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json');
-export const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-
-// Persist the (mutated) in-memory config back to disk.
-export function saveConfig() {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
-}
-
-export const DATA_DIR = path.join(ROOT, 'data');
-
-// Where finished songs live, named after the song. User-facing, so it defaults
-// to a visible ./songs folder rather than data/.
+// Where finished songs live, named after the song.
 export const SONGS_DIR = path.resolve(ROOT, config.storage?.songsDir ?? './songs');

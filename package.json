@@ -6,9 +6,9 @@
   "description": "Disposable music player — generates songs on the fly with Qwen (LM Studio) + MiniMax Music 3 (ComfyUI)",
   "scripts": {
     "setup": "npm install && npm --prefix web install",
-    "start": "node server/index.js",
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
     "build": "npm --prefix web run build",
-    "dev": "concurrently -n server,web -c blue,green \"node server/index.js\" \"npm --prefix web run dev\""
+    "dev": "concurrently -n server,web -c blue,green \"node --disable-warning=ExperimentalWarning server/index.js\" \"npm --prefix web run dev\""
   },
   "dependencies": {
     "express": "^4.19.2"
