@@ -17,6 +17,15 @@ export class Engine {
     this.config = config;
     this.running = false;
     this.writing = false; // a Qwen call is in flight
+    this.renderAbort = null; // AbortController while ComfyUI is rendering
+  }
+
+  // Cancel the render in progress; the half-made song is discarded.
+  cancelRender() {
+    if (!this.store.state.generating || !this.renderAbort) {
+      throw new Error('Nothing is rendering right now.');
+    }
+    this.renderAbort.abort();
   }
 
   get draftTarget() {
@@ -131,7 +140,11 @@ export class Engine {
           this.store.touch();
 
           this.setPhase('rendering-audio', dispatching.name);
-          const { file } = await renderSong(this.config, dispatching);
+          this.renderAbort = new AbortController();
+          const { file } = await renderSong(this.config, dispatching, {
+            signal: this.renderAbort.signal,
+          });
+          this.renderAbort = null;
 
           state.songs.push({
             id: dispatching.id,
@@ -149,6 +162,14 @@ export class Engine {
           state.lastError = null;
           this.store.touch();
         } catch (err) {
+          this.renderAbort = null;
+          if (err.cancelled) {
+            // User hit cancel: discard the song, keep the loop moving.
+            console.log('[engine] render cancelled:', dispatching?.name);
+            state.generating = null;
+            this.store.touch();
+            continue;
+          }
           console.error('[engine]', err.message);
           state.lastError = String(err.message ?? err);
           state.generating = null;

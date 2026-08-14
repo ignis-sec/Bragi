@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import Art from './Art.jsx';
 import SongRow from './SongRow.jsx';
 import DraftsPanel from './DraftsPanel.jsx';
+import { CrossIcon } from '../icons.jsx';
 
 function Lyrics({ song }) {
   if (!song) return null;
@@ -65,11 +66,19 @@ function GeneratingCard({ state }) {
         <i />
         <i />
       </span>
-      <div>
+      <div className="gen-meta">
         <div className="card-sub">In the studio · {mm}:{ss}</div>
         <div className="gen-name">{gen.name}</div>
         <div className="row-caption">{gen.caption}</div>
       </div>
+      <button
+        className="pill-btn danger"
+        title="Stop this render and discard the song"
+        onClick={() => api('/api/generating/cancel', { method: 'POST' }).catch(() => {})}
+      >
+        <CrossIcon size={12} />
+        Cancel
+      </button>
     </section>
   );
 }

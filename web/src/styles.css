@@ -412,6 +412,20 @@ textarea {
   border: 1px solid #2f4f38;
 }
 
+.gen-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.generating-card .pill-btn {
+  flex: none;
+}
+
+.pill-btn.danger:hover {
+  background: #5c2330;
+  color: #ff8fa0;
+}
+
 .gen-name {
   font-weight: 700;
   font-size: 16px;

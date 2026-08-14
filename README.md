@@ -63,6 +63,7 @@ If your LM Studio server requires an API key, put it in a `.env` file at the pro
 - **Pad from bookmarks** toggle — when a song finishes and the queue is empty, plays a random bookmarked song instead of going silent.
 - **Guidance panel** — genre, BPM, mood, instruments, vocal type, language, free-form instructions. Applied to every song Qwen writes next.
 - **Up next panel** — the queue of drafts Qwen has already written (3 by default), each expandable and editable until it's dispatched. Per-draft **Rewrite** asks Qwen for a different song (note: this loads the LLM even if ComfyUI is mid-render); the ✕ discards a draft.
+- **In the studio card** — shows the song ComfyUI is currently rendering with elapsed time, and a **Cancel** button that interrupts the render and discards the half-made song (the loop moves straight on to the next draft).
 - **Queue** — rendered songs waiting to play; auto-advances, removable.
 - **Now playing** — cover art, caption, full lyrics.
 - **Download** — every song row and the player bar have a download button for the mp3.
@@ -75,4 +76,4 @@ Finished songs are saved to `songs/<Song Name>.mp3` (configurable via `storage.s
 
 ## API (all local)
 
-`GET /api/state` · `GET /api/events` (SSE) · `POST /api/loop {enabled}` · `PATCH /api/settings` · `PATCH /api/guidance` · `PATCH /api/drafts/:id` · `POST /api/drafts/:id/regenerate` · `DELETE /api/drafts/:id` · `POST /api/songs/:id/played` · `POST /api/songs/:id/bookmark` · `POST /api/queue/:id/remove` · `DELETE /api/songs/:id` · `GET /audio/<file>`
+`GET /api/state` · `GET /api/events` (SSE) · `POST /api/loop {enabled}` · `POST /api/generating/cancel` · `PATCH /api/settings` · `PATCH /api/guidance` · `PATCH /api/drafts/:id` · `POST /api/drafts/:id/regenerate` · `DELETE /api/drafts/:id` · `POST /api/songs/:id/played` · `POST /api/songs/:id/bookmark` · `POST /api/queue/:id/remove` · `DELETE /api/songs/:id` · `GET /audio/<file>`

@@ -38,6 +38,15 @@ app.post('/api/loop', (req, res) => {
   res.json({ loopEnabled: store.state.loopEnabled });
 });
 
+app.post('/api/generating/cancel', (req, res) => {
+  try {
+    engine.cancelRender();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(409).json({ error: String(err.message ?? err) });
+  }
+});
+
 app.patch('/api/settings', (req, res) => {
   for (const key of ['autoplay', 'padFromBookmarks']) {
     if (key in (req.body ?? {})) store.state.settings[key] = Boolean(req.body[key]);

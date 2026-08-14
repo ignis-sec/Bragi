@@ -78,7 +78,21 @@ export async function freeComfy(config) {
   }
 }
 
-export async function renderSong(config, { name, caption, lyrics }) {
+// Best effort: drop the prompt if it's still queued, interrupt it if running.
+async function cancelPrompt(cfg, promptId) {
+  try {
+    await fetch(`${cfg.baseUrl}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delete: [promptId] }),
+    });
+    await fetch(`${cfg.baseUrl}/interrupt`, { method: 'POST' });
+  } catch (err) {
+    console.warn('[comfyui] could not cancel prompt:', err.message);
+  }
+}
+
+export async function renderSong(config, { name, caption, lyrics }, { signal } = {}) {
   const cfg = config.comfyui;
   const workflowPath = path.resolve(ROOT, cfg.workflow);
   const template = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
@@ -99,6 +113,12 @@ export async function renderSong(config, { name, caption, lyrics }) {
 
   const deadline = Date.now() + (cfg.timeoutMinutes ?? 30) * 60_000;
   while (true) {
+    if (signal?.aborted) {
+      await cancelPrompt(cfg, promptId);
+      const err = new Error('Render cancelled');
+      err.cancelled = true;
+      throw err;
+    }
     if (Date.now() > deadline) throw new Error('ComfyUI generation timed out');
     await sleep(cfg.pollIntervalMs ?? 3000);
 
