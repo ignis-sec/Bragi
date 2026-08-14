@@ -91,6 +91,8 @@ Injection is **opt-in per session**: with the dashboard's **Concept seeds** fiel
 
 On the lmstudio backend, pinned Concept seeds still work as prompt-level seeds (no injection).
 
+**Sparse semantic noise** (sidebar toggle) adds a second, independent control vector per session: K random common words from the *full* vocabulary (~tens of thousands of candidates), blended with random signed weights into one pulled-back direction — a different meaning-bearing "dream tilt" every session, unlike isotropic noise which is near-orthogonal to every feature and does nothing at safe norms. Composes with concept injection (llama.cpp sums multiple `--control-vector` files). Tune blend size and strength in Settings (`llamacpp.jlens.noise.tokens` / `.strength`); the picked words show in the sidebar status and are stored on each draft/song. First use downloads and caches the full unembedding matrix (`data/jlens/lm-head.npy`, ~1 GB, one-time) so later sessions are fully local.
+
 If your LM Studio server requires an API key, put it in a `.env` file at the project root (see `.env.example`): `LLM_API_KEY=...`. It's sent as an `Authorization: Bearer` header on chat requests; a real environment variable with the same name takes precedence over `.env`.
 
 > **Note:** `sample.txt` in this repo was empty at build time, so the caption/lyrics format in the system prompt follows the common conventions for this class of music models (comma-separated tag caption; `[verse]`/`[chorus]`-tagged lyrics). If your sample uses a different format, adjust `server/prompts/system-prompt.md` accordingly.

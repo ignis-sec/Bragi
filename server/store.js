@@ -25,6 +25,7 @@ const EMPTY_GUIDANCE = {
 const DEFAULT_SETTINGS = {
   autoplay: false,
   padFromBookmarks: false,
+  semanticNoise: false,
 };
 
 export class Store extends EventEmitter {

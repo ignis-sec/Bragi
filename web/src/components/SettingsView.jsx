@@ -76,6 +76,8 @@ const SECTIONS = [
       { path: 'llamacpp.jlens.layerRange.1', label: 'Inject to layer', type: 'number' },
       { path: 'llamacpp.jlens.layerOffset', label: 'Layer offset', type: 'number' },
       { path: 'llamacpp.jlens.conceptsPerSession', label: 'Concepts per session ("random" mode)', type: 'number' },
+      { path: 'llamacpp.jlens.noise.tokens', label: 'Noise: tokens blended', type: 'number', hint: 'Random words mixed into the semantic-noise direction' },
+      { path: 'llamacpp.jlens.noise.strength', label: 'Noise: strength', type: 'number', hint: 'Injection strength of the blended direction' },
       { path: 'llamacpp.jlens.mentionInPrompt', label: 'Also mention concepts in prompt', type: 'bool' },
       { path: 'llamacpp.jlens.lens', label: 'Lens file (.pt)', type: 'text' },
       { path: 'llamacpp.jlens.hfModel', label: 'HF model (for auto-add)', type: 'text' },

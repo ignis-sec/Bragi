@@ -39,7 +39,11 @@
         20
       ],
       "layerOffset": 0,
-      "mentionInPrompt": false
+      "mentionInPrompt": false,
+      "noise": {
+        "tokens": 8,
+        "strength": 0.25
+      }
     }
   },
   "lmstudio": {
@@ -60,7 +64,7 @@
     "timeoutMinutes": 30,
     "freeWaitMs": 5000,
     "workflowOverrides": {
-      "maxDuration": 400,
+      "maxDuration": 360,
       "steps": 30,
       "cfg": 1.7,
       "encodeCfgScale": 1.7,
@@ -84,8 +88,8 @@
     "file": "./data/muse.log",
     "categories": {
       "engine": true,
-      "prompts": false,
-      "llmResponses": false,
+      "prompts": true,
+      "llmResponses": true,
       "comfy": false,
       "jlens": true,
       "llamacpp": false,

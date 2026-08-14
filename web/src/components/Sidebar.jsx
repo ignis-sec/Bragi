@@ -34,6 +34,11 @@ function EngineStatus({ state }) {
               .join(', ')}
           </div>
         )}
+        {session?.noise && (
+          <div className="status-concepts">
+            Noise ×{session.noise.strength}: {session.noise.words.join(', ')}
+          </div>
+        )}
         {lastError && <div className="status-error">{lastError}</div>}
       </div>
     </div>
@@ -169,6 +174,17 @@ export default function Sidebar({ state, view, setView }) {
             api('/api/settings', {
               method: 'PATCH',
               body: { padFromBookmarks: !state.settings?.padFromBookmarks },
+            }).catch(() => {})
+          }
+        />
+        <ToggleRow
+          title="Semantic noise"
+          hint="Blend random word directions into each session (j-lens)"
+          on={state.settings?.semanticNoise}
+          onToggle={() =>
+            api('/api/settings', {
+              method: 'PATCH',
+              body: { semanticNoise: !state.settings?.semanticNoise },
             }).catch(() => {})
           }
         />

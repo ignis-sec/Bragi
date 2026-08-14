@@ -86,17 +86,53 @@ export class LlamaCppBackend {
     return out;
   }
 
-  async start(controlVector) {
+  // Build data/jlens/noise.gguf: K random vocabulary words blended with random
+  // signed weights into one pulled-back direction ("sparse semantic noise").
+  // Returns { path, info: {words, weights, strength} }.
+  async makeNoiseVector() {
+    const j = this.cfg.jlens ?? {};
+    const noise = j.noise ?? {};
+    const out = path.join(DATA_DIR, 'jlens', 'noise.gguf');
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    const python = path.resolve(ROOT, j.python ?? 'tools/.venv/bin/python');
+    const args = [
+      path.resolve(ROOT, 'tools', 'jlens_semantic_noise.py'),
+      '--deck', path.resolve(ROOT, j.deck ?? 'data/jlens/deck.npz'),
+      '--lens', path.resolve(ROOT, j.lens),
+      '--tokens', String(noise.tokens ?? 8),
+      '--strength', String(noise.strength ?? 0.25),
+      '--out', out,
+    ];
+    if (j.hfModel) args.push('--hf-model', j.hfModel);
+    if (j.layerRange) args.push('--layers', `${j.layerRange[0]}-${j.layerRange[1]}`);
+    if (j.layerOffset) args.push('--layer-offset', String(j.layerOffset));
+    const stdout = await new Promise((resolve, reject) => {
+      execFile(python, args, (err, out_, stderr) => {
+        if (err) {
+          logEvent('jlens', 'semantic noise FAILED', { stderr: (stderr || err.message).trim() });
+          reject(new Error(`jlens_semantic_noise failed: ${(stderr || err.message).trim()}`));
+        } else resolve(out_);
+      });
+    });
+    const m = stdout.match(/^NOISE (\{.*\})$/m);
+    const info = m ? JSON.parse(m[1]) : null;
+    logEvent('jlens', 'semantic noise vector built', info);
+    return { path: out, info };
+  }
+
+  async start(controlVectors = []) {
     if (this.proc) await this.stop();
     const cfg = this.cfg;
     if (!cfg.model) throw new Error('llamacpp.model is not set in config.json');
+    // llama.cpp sums multiple control vector files — concepts + noise compose.
+    const cvs = (Array.isArray(controlVectors) ? controlVectors : [controlVectors]).filter(Boolean);
     const args = [
       '-m', path.resolve(ROOT, cfg.model),
       '--host', '127.0.0.1',
       '--port', String(cfg.port ?? 8080),
       '-c', String(cfg.ctxSize ?? 16384),
       '--jinja',
-      ...(controlVector ? ['--control-vector', controlVector] : []),
+      ...cvs.flatMap((cv) => ['--control-vector', cv]),
       ...(cfg.extraArgs ?? []),
     ];
     const logPath = path.join(DATA_DIR, 'llama-server.log');

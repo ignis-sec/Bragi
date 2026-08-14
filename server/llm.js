@@ -17,10 +17,10 @@ class LmStudioSession {
     this.concepts = null;
   }
 
-  async begin(guidance) {
+  async begin(guidance, _settings) {
     const pinned = parseConceptSpec(guidance?.concepts);
     this.concepts = pinned.length ? pinned.map((c) => ({ word: c.word, strength: null })) : null;
-    return { concepts: this.concepts, injected: false };
+    return { concepts: this.concepts, injected: false, noise: null };
   }
 
   async writeSong(guidance, recentSongs) {
@@ -41,12 +41,20 @@ class LlamaCppSession {
     this.concepts = null;
   }
 
-  async begin(guidance) {
+  async begin(guidance, settings = {}) {
+    const j = this.config.llamacpp?.jlens ?? {};
     const concepts = this.backend.pickConcepts(guidance, parseConceptSpec);
-    const controlVector = concepts?.length ? await this.backend.makeControlVector(concepts) : null;
-    await this.backend.start(controlVector);
+    const vectors = [];
+    if (concepts?.length) vectors.push(await this.backend.makeControlVector(concepts));
+    let noise = null;
+    if (j.enabled && settings.semanticNoise) {
+      const built = await this.backend.makeNoiseVector();
+      vectors.push(built.path);
+      noise = built.info;
+    }
+    await this.backend.start(vectors);
     this.concepts = concepts;
-    return { concepts, injected: Boolean(controlVector) };
+    return { concepts, injected: Boolean(concepts?.length), noise };
   }
 
   async writeSong(guidance, recentSongs) {

@@ -76,6 +76,7 @@ export class Engine {
         ...meta,
         concepts: state.session?.concepts ?? null,
         injected: state.session?.injected ?? false,
+        noise: state.session?.noise ?? null,
         createdAt: Date.now(),
       };
     } finally {
@@ -86,12 +87,13 @@ export class Engine {
   async beginSession() {
     const { state } = this.store;
     this.llm = createLLM(this.config);
-    const info = await this.llm.begin(state.guidance);
+    const info = await this.llm.begin(state.guidance, state.settings);
     this.inSession = true;
     state.session = {
       backend: this.llm.name,
       concepts: info.concepts ?? null,
       injected: info.injected ?? false,
+      noise: info.noise ?? null,
     };
     logEvent('engine', `songwriter session begin (${this.llm.name})`, state.session);
     this.store.touch();
@@ -201,6 +203,7 @@ export class Engine {
             lyrics: dispatching.lyrics,
             concepts: dispatching.concepts ?? null,
             injected: dispatching.injected ?? false,
+            noise: dispatching.noise ?? null,
             file,
             createdAt: dispatching.createdAt,
             readyAt: Date.now(),

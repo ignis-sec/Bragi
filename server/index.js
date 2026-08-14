@@ -138,7 +138,7 @@ app.post('/api/generating/cancel', (req, res) => {
 });
 
 app.patch('/api/settings', (req, res) => {
-  for (const key of ['autoplay', 'padFromBookmarks']) {
+  for (const key of ['autoplay', 'padFromBookmarks', 'semanticNoise']) {
     if (key in (req.body ?? {})) store.state.settings[key] = Boolean(req.body[key]);
   }
   store.touch();
