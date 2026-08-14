@@ -7,8 +7,19 @@ function hash(str = '') {
   return Math.abs(h);
 }
 
-// Deterministic gradient cover art from the song id.
+// Real album cover when one has been generated; deterministic gradient
+// placeholder otherwise.
 export default function Art({ song, size = 48, radius = 6 }) {
+  if (song?.cover) {
+    return (
+      <img
+        className="art"
+        src={`/covers/${encodeURIComponent(song.cover)}`}
+        alt=""
+        style={{ width: size, height: size, borderRadius: radius, objectFit: 'cover' }}
+      />
+    );
+  }
   const h = hash(song?.id ?? song?.name ?? '?');
   const h1 = h % 360;
   const h2 = (h1 + 40 + (h % 80)) % 360;

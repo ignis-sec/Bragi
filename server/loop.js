@@ -26,6 +26,7 @@ export class Engine {
     this.running = false;
     this.writing = false; // a songwriter call is in flight
     this.inSession = false; // a songwriter session (begin..end) is active
+    this.coverBusy = false; // the cover engine holds the GPU
     this.renderAbort = null; // AbortController while ComfyUI is rendering
   }
 
@@ -177,6 +178,12 @@ export class Engine {
       while (state.loopEnabled) {
         let dispatching = null;
         try {
+          // The cover engine yields as soon as we have work — wait it out.
+          if (this.coverBusy) {
+            this.setPhase('covers', 'Album covers in the studio');
+            await sleep(2000);
+            continue;
+          }
           if (state.queue.length >= (this.config.generation.maxQueuedSongs ?? 3)) {
             this.setPhase('queue-full', `${state.queue.length} songs waiting`);
             await sleep(3000);

@@ -76,6 +76,10 @@
       "vaeName": "minimax_music3_dav.safetensors"
     }
   },
+  "covers": {
+    "workflow": "./album_cover.json",
+    "intervalSec": 15
+  },
   "generation": {
     "maxQueuedSongs": 3,
     "draftLookahead": 3,
@@ -94,6 +98,7 @@
       "comfy": false,
       "jlens": true,
       "llamacpp": false,
+      "covers": true,
       "http": false
     }
   }

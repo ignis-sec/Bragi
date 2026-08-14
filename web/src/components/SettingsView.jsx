@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiText } from '../api.js';
 
+const COVERS_SECTION_FIELDS = [
+  { path: 'covers.workflow', label: 'Cover workflow', type: 'text' },
+  { path: 'covers.intervalSec', label: 'Idle check interval (s)', type: 'number' },
+];
+
 const LOG_CATEGORIES = [
   { key: 'engine', hint: 'Loop lifecycle: phases, sessions, drafts, errors' },
   { key: 'prompts', hint: 'Full prompts sent to the songwriter LLM' },
@@ -8,6 +13,7 @@ const LOG_CATEGORIES = [
   { key: 'comfy', hint: 'ComfyUI dispatches, renders, /free calls' },
   { key: 'jlens', hint: 'Concept picks, control-vector builds, auto-adds' },
   { key: 'llamacpp', hint: 'llama-server spawn/health/stop' },
+  { key: 'covers', hint: 'Album cover prompts and renders' },
   { key: 'http', hint: 'Dashboard API requests and bodies' },
 ];
 
@@ -110,6 +116,10 @@ const SECTIONS = [
       { path: 'comfyui.workflowOverrides.clipName', label: 'Text encoder (CLIP)', type: 'text' },
       { path: 'comfyui.workflowOverrides.vaeName', label: 'VAE', type: 'text' },
     ],
+  },
+  {
+    title: 'Album covers',
+    fields: COVERS_SECTION_FIELDS,
   },
   {
     title: 'Server & storage',

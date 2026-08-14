@@ -5,10 +5,13 @@ import express from 'express';
 import { config, saveConfig, ROOT, SONGS_DIR } from './config.js';
 import { Store } from './store.js';
 import { Engine } from './loop.js';
+import { CoverEngine, COVERS_DIR } from './covers.js';
 import { logEvent, getLogs, clearLogs } from './logger.js';
 
 const store = new Store();
 const engine = new Engine(store, config);
+const covers = new CoverEngine(store, config, engine);
+covers.start();
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -139,7 +142,7 @@ app.post('/api/generating/cancel', (req, res) => {
 });
 
 app.patch('/api/settings', (req, res) => {
-  for (const key of ['autoplay', 'padFromBookmarks', 'semanticNoise']) {
+  for (const key of ['autoplay', 'padFromBookmarks', 'semanticNoise', 'albumArt']) {
     if (key in (req.body ?? {})) store.state.settings[key] = Boolean(req.body[key]);
   }
   store.touch();
@@ -252,6 +255,7 @@ app.delete('/api/songs/:id', (req, res) => {
   store.state.queue = store.state.queue.filter((id) => id !== song.id);
   store.state.history = store.state.history.filter((h) => h.songId !== song.id);
   fs.rm(path.join(SONGS_DIR, song.file), { force: true }, () => {});
+  if (song.cover) fs.rm(path.join(COVERS_DIR, song.cover), { force: true }, () => {});
   store.touch();
   res.json({ ok: true });
 });
@@ -259,6 +263,7 @@ app.delete('/api/songs/:id', (req, res) => {
 // ---- static ----
 
 app.use('/audio', express.static(SONGS_DIR));
+app.use('/covers', express.static(COVERS_DIR));
 
 const webDist = path.join(ROOT, 'web', 'dist');
 if (fs.existsSync(webDist)) {

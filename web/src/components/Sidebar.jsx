@@ -11,6 +11,7 @@ const PHASE_LABELS = {
   'writing-draft': 'Qwen is writing the next song…',
   'unloading-llm': 'Stopping the songwriter…',
   'rendering-audio': 'ComfyUI is rendering audio…',
+  covers: 'Making album covers…',
   error: 'Error — retrying shortly',
 };
 
@@ -175,6 +176,17 @@ export default function Sidebar({ state, view, setView }) {
             api('/api/settings', {
               method: 'PATCH',
               body: { padFromBookmarks: !state.settings?.padFromBookmarks },
+            }).catch(() => {})
+          }
+        />
+        <ToggleRow
+          title="Album art"
+          hint="Generate covers for bookmarks while idle"
+          on={state.settings?.albumArt}
+          onToggle={() =>
+            api('/api/settings', {
+              method: 'PATCH',
+              body: { albumArt: !state.settings?.albumArt },
             }).catch(() => {})
           }
         />

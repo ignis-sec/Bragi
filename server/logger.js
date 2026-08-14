@@ -7,7 +7,7 @@ import { config, ROOT } from './config.js';
 // Entries go to an in-memory ring buffer (served at /api/logs for the
 // dashboard viewer), to the console, and optionally to a file.
 
-export const CATEGORIES = ['engine', 'prompts', 'llmResponses', 'comfy', 'jlens', 'llamacpp', 'http'];
+export const CATEGORIES = ['engine', 'prompts', 'llmResponses', 'comfy', 'jlens', 'llamacpp', 'covers', 'http'];
 
 const MAX_BUFFER = 500;
 const MAX_DATA_CHARS = 16_000;

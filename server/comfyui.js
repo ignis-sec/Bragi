@@ -20,11 +20,14 @@ export function songFilename(name, ext) {
   return file;
 }
 
-// Replace ${caption} / ${lyrics} placeholders anywhere in the workflow.
+// Replace ${caption} / $prompt style placeholders anywhere in the workflow.
 // Works on the parsed JSON tree, so quotes/newlines in the values stay safe.
 export function substitute(node, vars) {
   if (typeof node === 'string') {
-    return node.replace(/\$\{(\w+)\}/g, (m, key) => (key in vars ? vars[key] : m));
+    return node.replace(/\$\{(\w+)\}|\$(\w+)/g, (m, braced, bare) => {
+      const key = braced ?? bare;
+      return key in vars ? vars[key] : m;
+    });
   }
   if (Array.isArray(node)) return node.map((n) => substitute(n, vars));
   if (node && typeof node === 'object') {
@@ -129,14 +132,8 @@ async function cancelPrompt(cfg, promptId) {
   }
 }
 
-export async function renderSong(config, { name, caption, lyrics }, { signal } = {}) {
-  const cfg = config.comfyui;
-  const workflowPath = path.resolve(ROOT, cfg.workflow);
-  const template = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
-  const prompt = substitute(template, { caption, lyrics });
-  applyOverrides(prompt, cfg.workflowOverrides);
-  randomizeSeeds(prompt);
-
+// Submit a workflow and poll until its history entry completes.
+async function submitAndPoll(cfg, prompt, { signal, label } = {}) {
   const res = await fetch(`${cfg.baseUrl}/prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -149,11 +146,7 @@ export async function renderSong(config, { name, caption, lyrics }, { signal } =
   }
   const { prompt_id: promptId } = await res.json();
   if (!promptId) throw new Error('ComfyUI did not return a prompt_id');
-  logEvent('comfy', `dispatched "${name}" (prompt_id ${promptId})`, {
-    caption,
-    lyricsChars: lyrics?.length,
-    overrides: cfg.workflowOverrides,
-  });
+  logEvent('comfy', `dispatched ${label ?? 'workflow'} (prompt_id ${promptId})`);
 
   const deadline = Date.now() + (cfg.timeoutMinutes ?? 30) * 60_000;
   while (true) {
@@ -178,12 +171,55 @@ export async function renderSong(config, { name, caption, lyrics }, { signal } =
       throw new Error(`ComfyUI failed: ${comfyErrorMessage(entry)}`);
     }
     if (entry.status?.completed || Object.keys(entry.outputs ?? {}).length) {
-      const audio = findAudioOutput(entry.outputs);
-      if (!audio) throw new Error('ComfyUI finished but produced no audio output');
-      logEvent('comfy', `render complete (prompt_id ${promptId})`, { audio });
-      return await download(cfg, audio, name);
+      logEvent('comfy', `render complete (prompt_id ${promptId})`);
+      return entry;
     }
   }
+}
+
+export async function renderSong(config, { name, caption, lyrics }, { signal } = {}) {
+  const cfg = config.comfyui;
+  const workflowPath = path.resolve(ROOT, cfg.workflow);
+  const template = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+  const prompt = substitute(template, { caption, lyrics });
+  applyOverrides(prompt, cfg.workflowOverrides);
+  randomizeSeeds(prompt);
+
+  const entry = await submitAndPoll(cfg, prompt, { signal, label: `song "${name}"` });
+  const audio = findAudioOutput(entry.outputs);
+  if (!audio) throw new Error('ComfyUI finished but produced no audio output');
+  return await download(cfg, audio, name);
+}
+
+function findImageOutput(outputs = {}) {
+  for (const nodeOutput of Object.values(outputs)) {
+    const image = nodeOutput?.images?.[0];
+    if (image?.filename) return image;
+  }
+  return null;
+}
+
+// Render an arbitrary image workflow (album covers). Returns the image bytes.
+export async function renderImage(config, { workflow, vars, signal, label }) {
+  const cfg = config.comfyui;
+  const template = JSON.parse(fs.readFileSync(path.resolve(ROOT, workflow), 'utf8'));
+  const prompt = substitute(template, vars);
+  randomizeSeeds(prompt);
+
+  const entry = await submitAndPoll(cfg, prompt, { signal, label });
+  const image = findImageOutput(entry.outputs);
+  if (!image) throw new Error('ComfyUI finished but produced no image output');
+  const params = new URLSearchParams({
+    filename: image.filename,
+    subfolder: image.subfolder ?? '',
+    type: image.type ?? 'output',
+  });
+  const res = await fetch(`${cfg.baseUrl}/view?${params}`);
+  if (!res.ok) throw new Error(`Could not download image from ComfyUI (${res.status})`);
+  return {
+    buffer: Buffer.from(await res.arrayBuffer()),
+    ext: path.extname(image.filename) || '.png',
+  };
 }
 
 async function download(cfg, audio, name) {

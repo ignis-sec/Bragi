@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   autoplay: false,
   padFromBookmarks: false,
   semanticNoise: false,
+  albumArt: true,
 };
 
 export class Store extends EventEmitter {

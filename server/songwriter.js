@@ -134,6 +134,62 @@ function parseSongFromMessage(msg) {
   return args;
 }
 
+// Optional sampling knobs — only sent when set; unknown fields are ignored
+// by servers that don't support them.
+function applySampling(body, sampling = {}) {
+  if (sampling.topP != null) body.top_p = sampling.topP;
+  if (sampling.topK != null) body.top_k = sampling.topK;
+  if (sampling.minP != null) body.min_p = sampling.minP;
+  if (sampling.repeatPenalty != null) body.repeat_penalty = sampling.repeatPenalty;
+}
+
+// Plain-text chat completion against any OpenAI-compatible endpoint (used for
+// album-cover image prompts). Returns the assistant's text, <think> stripped.
+export async function requestCompletion({
+  baseUrl,
+  apiKey,
+  model,
+  sampling = {},
+  system,
+  user,
+  maxTokens = 800,
+  ttl,
+}) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  const body = {
+    model,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    temperature: sampling.temperature ?? 0.8,
+    max_tokens: maxTokens,
+  };
+  applySampling(body, sampling);
+  if (ttl) body.ttl = ttl;
+
+  logEvent('prompts', `completion request -> ${baseUrl}`, { system, user });
+  const t0 = Date.now();
+  const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Completion request failed (${res.status}): ${text.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  const msg = data.choices?.[0]?.message ?? {};
+  logEvent('llmResponses', `completion response in ${Date.now() - t0}ms`, { message: msg });
+  const text = String(msg.content || msg.reasoning_content || '')
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    .trim();
+  if (!text) throw new Error('The model returned an empty completion');
+  return text;
+}
+
 // One songwriting request against any OpenAI-compatible chat endpoint
 // (LM Studio or llama-server). Falls back to tool-free JSON output if the
 // server rejects the tools/tool_choice fields.
@@ -173,12 +229,7 @@ export async function requestSong({
     temperature: sampling.temperature ?? temperature ?? 0.9,
     max_tokens: 4096,
   };
-  // Optional sampling knobs — only sent when set; unknown fields are ignored
-  // by servers that don't support them.
-  if (sampling.topP != null) base.top_p = sampling.topP;
-  if (sampling.topK != null) base.top_k = sampling.topK;
-  if (sampling.minP != null) base.min_p = sampling.minP;
-  if (sampling.repeatPenalty != null) base.repeat_penalty = sampling.repeatPenalty;
+  applySampling(base, sampling);
   if (ttl) base.ttl = ttl; // LM Studio JIT auto-unload; ignored elsewhere
 
   logEvent('prompts', `songwriter request -> ${baseUrl}`, {
