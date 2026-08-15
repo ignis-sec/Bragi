@@ -1,7 +1,16 @@
 import React from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
-import { PlayIcon, HeartIcon, TrashIcon, CrossIcon, NoteIcon, DownloadIcon } from '../icons.jsx';
+import { ConceptChips, NoiseChips } from './Chips.jsx';
+import {
+  PlayIcon,
+  HeartIcon,
+  TrashIcon,
+  CrossIcon,
+  NoteIcon,
+  DownloadIcon,
+  RefreshIcon,
+} from '../icons.jsx';
 
 function timeAgo(ts) {
   if (!ts) return '';
@@ -12,7 +21,15 @@ function timeAgo(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
-export default function SongRow({ song, index, player, timestamp, onRemove, removeIcon }) {
+export default function SongRow({
+  song,
+  index,
+  player,
+  timestamp,
+  onRemove,
+  removeIcon,
+  onRegenCover,
+}) {
   const isCurrent = player.current?.id === song.id;
   return (
     <div className={`song-row ${isCurrent ? 'current' : ''}`}>
@@ -29,7 +46,11 @@ export default function SongRow({ song, index, player, timestamp, onRemove, remo
       </div>
       <Art song={song} size={42} />
       <div className="row-meta">
-        <div className="row-name">{song.name}</div>
+        <div className="row-name">
+          {song.name}
+          <ConceptChips concepts={song.concepts} injected={song.injected} />
+          <NoiseChips noise={song.noise} />
+        </div>
         <div className="row-caption">{song.caption}</div>
       </div>
       {timestamp && <div className="row-time">{timeAgo(timestamp)}</div>}
@@ -52,6 +73,15 @@ export default function SongRow({ song, index, player, timestamp, onRemove, remo
         >
           <DownloadIcon size={15} />
         </a>
+        {onRegenCover && (
+          <button
+            className="icon-btn"
+            title="Reroll album cover"
+            onClick={() => onRegenCover(song)}
+          >
+            <RefreshIcon size={15} />
+          </button>
+        )}
         {onRemove && (
           <button className="icon-btn" title="Remove" onClick={() => onRemove(song)}>
             {removeIcon === 'trash' ? <TrashIcon size={15} /> : <CrossIcon size={14} />}

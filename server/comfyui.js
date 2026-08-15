@@ -67,6 +67,13 @@ export function applyOverrides(prompt, o = {}) {
       case 'VAELoader':
         set(inputs, 'vae_name', o.vaeName);
         break;
+      case 'EmptySD3LatentImage':
+        set(inputs, 'width', o.width);
+        set(inputs, 'height', o.height);
+        break;
+      case 'ModelSamplingAuraFlow':
+        set(inputs, 'shift', o.shift);
+        break;
     }
   }
 }
@@ -200,10 +207,11 @@ function findImageOutput(outputs = {}) {
 }
 
 // Render an arbitrary image workflow (album covers). Returns the image bytes.
-export async function renderImage(config, { workflow, vars, signal, label }) {
+export async function renderImage(config, { workflow, vars, signal, label, overrides }) {
   const cfg = config.comfyui;
   const template = JSON.parse(fs.readFileSync(path.resolve(ROOT, workflow), 'utf8'));
   const prompt = substitute(template, vars);
+  applyOverrides(prompt, overrides);
   randomizeSeeds(prompt);
 
   const entry = await submitAndPoll(cfg, prompt, { signal, label });

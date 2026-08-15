@@ -38,7 +38,10 @@ function EngineStatus({ state }) {
         )}
         {session?.noise && (
           <div className="status-concepts">
-            Noise ×{session.noise.strength}: {session.noise.words.join(', ')}
+            Noise ×{session.noise.strength}:{' '}
+            {session.noise.words
+              .filter((w, i) => (session.noise.weights?.[i] ?? 1) >= 0)
+              .join(', ')}
           </div>
         )}
         {lastError && <div className="status-error">{lastError}</div>}

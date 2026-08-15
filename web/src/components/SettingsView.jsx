@@ -4,6 +4,16 @@ import { api, apiText } from '../api.js';
 const COVERS_SECTION_FIELDS = [
   { path: 'covers.workflow', label: 'Cover workflow', type: 'text' },
   { path: 'covers.intervalSec', label: 'Idle check interval (s)', type: 'number' },
+  { path: 'covers.workflowOverrides.unetName', label: 'Image model (UNET)', type: 'text' },
+  { path: 'covers.workflowOverrides.clipName', label: 'Text encoder (CLIP)', type: 'text' },
+  { path: 'covers.workflowOverrides.vaeName', label: 'VAE', type: 'text' },
+  { path: 'covers.workflowOverrides.steps', label: 'Diffusion steps', type: 'number' },
+  { path: 'covers.workflowOverrides.cfg', label: 'CFG', type: 'number' },
+  { path: 'covers.workflowOverrides.samplerName', label: 'Sampler', type: 'text' },
+  { path: 'covers.workflowOverrides.scheduler', label: 'Scheduler', type: 'text' },
+  { path: 'covers.workflowOverrides.width', label: 'Width (px)', type: 'number' },
+  { path: 'covers.workflowOverrides.height', label: 'Height (px)', type: 'number' },
+  { path: 'covers.workflowOverrides.shift', label: 'AuraFlow shift', type: 'number' },
 ];
 
 const LOG_CATEGORIES = [
@@ -41,6 +51,7 @@ const SECTIONS = [
       { path: 'generation.draftLookahead', label: 'Draft lookahead', type: 'number', hint: 'Editable drafts kept waiting during renders' },
       { path: 'generation.maxQueuedSongs', label: 'Max queued songs', type: 'number', hint: 'Loop pauses when this many rendered songs wait' },
       { path: 'generation.recentSongsInPrompt', label: 'Recent songs in prompt', type: 'bool', hint: 'List recent titles and ask for something clearly different' },
+      { path: 'generation.stripParentheses', label: 'Strip parentheses from lyrics', type: 'bool', hint: 'Safety net — removes any parenthesized text before rendering' },
     ],
   },
   {
@@ -55,6 +66,7 @@ const SECTIONS = [
       { path: 'lmstudio.topK', label: 'top_k', type: 'number', optional: true },
       { path: 'lmstudio.minP', label: 'min_p', type: 'number', optional: true },
       { path: 'lmstudio.repeatPenalty', label: 'repeat_penalty', type: 'number', optional: true },
+      { path: 'lmstudio.maxTokens', label: 'Max output tokens', type: 'number', hint: 'Thinking counts toward this — raise if generations truncate' },
     ],
   },
   {
@@ -71,6 +83,7 @@ const SECTIONS = [
       { path: 'llamacpp.topK', label: 'top_k', type: 'number', optional: true },
       { path: 'llamacpp.minP', label: 'min_p', type: 'number', optional: true },
       { path: 'llamacpp.repeatPenalty', label: 'repeat_penalty', type: 'number', optional: true },
+      { path: 'llamacpp.maxTokens', label: 'Max output tokens', type: 'number', hint: 'Thinking counts toward this — raise if generations truncate' },
     ],
   },
   {

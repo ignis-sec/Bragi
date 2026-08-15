@@ -40,6 +40,11 @@ export class CoverEngine {
     }, interval);
   }
 
+  // Forget a song's failure backoff (used when the user asks for a reroll).
+  reset(songId) {
+    this.failedAt.delete(songId);
+  }
+
   candidates() {
     return this.store.state.songs.filter(
       (s) =>
@@ -118,7 +123,7 @@ export class CoverEngine {
         target = {
           baseUrl: llama.baseUrl,
           model: 'muse',
-          sampling: { temperature: cfg.temperature, topP: cfg.topP, topK: cfg.topK, minP: cfg.minP, repeatPenalty: cfg.repeatPenalty },
+          sampling: { temperature: cfg.temperature, topP: cfg.topP, topK: cfg.topK, minP: cfg.minP, repeatPenalty: cfg.repeatPenalty, maxTokens: cfg.maxTokens },
         };
       } else {
         const lm = this.config.lmstudio;
@@ -127,7 +132,7 @@ export class CoverEngine {
           apiKey: process.env.LLM_API_KEY,
           model: lm.model,
           ttl: lm.ttlSeconds,
-          sampling: { temperature: lm.temperature, topP: lm.topP, topK: lm.topK, minP: lm.minP, repeatPenalty: lm.repeatPenalty },
+          sampling: { temperature: lm.temperature, topP: lm.topP, topK: lm.topK, minP: lm.minP, repeatPenalty: lm.repeatPenalty, maxTokens: lm.maxTokens },
         };
       }
       for (const song of songs) {
@@ -158,6 +163,7 @@ export class CoverEngine {
       workflow: this.config.covers?.workflow ?? './album_cover.json',
       vars: { prompt: song.coverPrompt },
       label: `cover "${song.name}"`,
+      overrides: this.config.covers?.workflowOverrides,
     });
     fs.mkdirSync(COVERS_DIR, { recursive: true });
     const file = `${song.id}${ext}`;

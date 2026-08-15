@@ -38,6 +38,29 @@ export const SUBMIT_SONG_TOOL = {
   },
 };
 
+// Deterministic safety net for the no-parentheses lyrics rule: removes
+// parenthesized content (nested pairs included), drops lines that were pure
+// parentheticals, and tidies the whitespace left behind.
+export function stripParentheses(text) {
+  const kept = [];
+  for (const line of String(text ?? '').split('\n')) {
+    let s = line;
+    let prev;
+    do {
+      prev = s;
+      s = s.replace(/\([^()]*\)/g, '');
+    } while (s !== prev);
+    s = s
+      .replace(/[()]/g, '')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/ ([,.!?;:])/g, '$1')
+      .trimEnd();
+    if (s.trim() === '' && line.trim() !== '') continue; // line was all parenthetical
+    kept.push(s);
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 // "ocean, rust:8" -> [{word:'ocean', strength:null}, {word:'rust', strength:8}]
 export function parseConceptSpec(spec) {
   return String(spec ?? '')
@@ -141,6 +164,7 @@ function applySampling(body, sampling = {}) {
   if (sampling.topK != null) body.top_k = sampling.topK;
   if (sampling.minP != null) body.min_p = sampling.minP;
   if (sampling.repeatPenalty != null) body.repeat_penalty = sampling.repeatPenalty;
+  if (sampling.maxTokens != null) body.max_tokens = sampling.maxTokens;
 }
 
 const SUBMIT_COVER_TOOL = {
@@ -173,7 +197,7 @@ export async function requestCoverPrompt({
   sampling = {},
   system,
   user,
-  maxTokens = 2048,
+  maxTokens = 4096,
   ttl,
 }) {
   const headers = { 'Content-Type': 'application/json' };
@@ -289,11 +313,13 @@ export async function requestSong({
 
   // Cap output so a derailed generation (e.g. an overdosed j-lens injection
   // chanting one word) fails fast instead of rambling to the context limit.
+  // Thinking traces count toward this, so the default is generous; tune via
+  // the backend's maxTokens setting.
   const base = {
     model,
     messages,
     temperature: sampling.temperature ?? temperature ?? 0.9,
-    max_tokens: 4096,
+    max_tokens: 8192,
   };
   applySampling(base, sampling);
   if (ttl) base.ttl = ttl; // LM Studio JIT auto-unload; ignored elsewhere

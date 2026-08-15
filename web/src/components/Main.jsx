@@ -4,6 +4,7 @@ import Art from './Art.jsx';
 import SongRow from './SongRow.jsx';
 import DraftsPanel from './DraftsPanel.jsx';
 import SettingsView from './SettingsView.jsx';
+import { ConceptChips, NoiseChips } from './Chips.jsx';
 import { CrossIcon } from '../icons.jsx';
 
 function Lyrics({ song }) {
@@ -71,15 +72,8 @@ function GeneratingCard({ state }) {
         <div className="card-sub">In the studio · {mm}:{ss}</div>
         <div className="gen-name">
           {gen.name}
-          {gen.concepts?.map((c) => (
-            <span
-              key={c.word}
-              className={`concept-chip ${gen.injected ? 'injected' : ''}`}
-              title={c.strength != null ? `×${c.strength}` : undefined}
-            >
-              {c.word}
-            </span>
-          ))}
+          <ConceptChips concepts={gen.concepts} injected={gen.injected} />
+          <NoiseChips noise={gen.noise} />
         </div>
         <div className="row-caption">{gen.caption}</div>
       </div>
@@ -146,6 +140,11 @@ function BookmarksView({ state, player }) {
       api(`/api/songs/${song.id}`, { method: 'DELETE' }).catch(() => {});
     }
   };
+  const regenCover = (song) => {
+    if (confirm(`Reroll the album cover for “${song.name}”? The current art is discarded.`)) {
+      api(`/api/songs/${song.id}/cover/regenerate`, { method: 'POST' }).catch(() => {});
+    }
+  };
   return (
     <section className="card">
       <div className="card-head">
@@ -165,6 +164,7 @@ function BookmarksView({ state, player }) {
             player={player}
             onRemove={remove}
             removeIcon="trash"
+            onRegenCover={regenCover}
           />
         ))
       )}

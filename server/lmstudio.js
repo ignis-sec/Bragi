@@ -13,6 +13,7 @@ export async function generateSongMeta(config, guidance, recentSongs, concepts =
       topK: lm.topK,
       minP: lm.minP,
       repeatPenalty: lm.repeatPenalty,
+      maxTokens: lm.maxTokens,
     },
     ttl: lm.ttlSeconds,
     guidance,

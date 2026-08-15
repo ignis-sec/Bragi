@@ -116,6 +116,7 @@ class LlamaCppSession {
         topK: cfg.topK,
         minP: cfg.minP,
         repeatPenalty: cfg.repeatPenalty,
+        maxTokens: cfg.maxTokens,
       },
       guidance,
       recentSongs,

@@ -15,6 +15,7 @@
     "topK": null,
     "minP": null,
     "repeatPenalty": null,
+    "maxTokens": 8192,
     "extraArgs": [
       "-ngl",
       "99",
@@ -54,6 +55,7 @@
     "topK": null,
     "minP": null,
     "repeatPenalty": null,
+    "maxTokens": 8192,
     "ttlSeconds": 120,
     "unload": "cli"
   },
@@ -78,12 +80,25 @@
   },
   "covers": {
     "workflow": "./album_cover.json",
-    "intervalSec": 15
+    "intervalSec": 15,
+    "workflowOverrides": {
+      "unetName": "zImageTurbo_turbo.safetensors",
+      "clipName": "qwen_3_4b.safetensors",
+      "vaeName": "ZI-ae.safetensors",
+      "steps": 8,
+      "cfg": 1,
+      "samplerName": "res_multistep",
+      "scheduler": "simple",
+      "width": 512,
+      "height": 512,
+      "shift": 3
+    }
   },
   "generation": {
     "maxQueuedSongs": 3,
     "draftLookahead": 3,
-    "recentSongsInPrompt": false
+    "recentSongsInPrompt": false,
+    "stripParentheses": true
   },
   "storage": {
     "songsDir": "./songs"

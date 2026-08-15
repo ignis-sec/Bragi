@@ -223,6 +223,23 @@ app.post('/api/songs/:id/bookmark', (req, res) => {
   res.json({ bookmarked: song.bookmarked });
 });
 
+// Reroll a bookmarked song's album cover: drop the art AND the cached image
+// prompt so both get regenerated fresh on the next idle window.
+app.post('/api/songs/:id/cover/regenerate', (req, res) => {
+  const song = store.song(req.params.id);
+  if (!song) return res.status(404).json({ error: 'Unknown song' });
+  if (!song.bookmarked) {
+    return res.status(400).json({ error: 'Only bookmarked songs get album covers.' });
+  }
+  if (song.cover) fs.rm(path.join(COVERS_DIR, song.cover), { force: true }, () => {});
+  song.cover = null;
+  song.coverPrompt = null;
+  store.touch();
+  covers.reset(song.id);
+  covers.tick().catch(() => {}); // start right away if the pipeline is idle
+  res.json({ ok: true });
+});
+
 app.post('/api/queue/:id/remove', (req, res) => {
   store.state.queue = store.state.queue.filter((id) => id !== req.params.id);
   store.touch();

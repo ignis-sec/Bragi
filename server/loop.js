@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { renderSong, freeComfy } from './comfyui.js';
 import { createLLM } from './llm.js';
+import { stripParentheses } from './songwriter.js';
 import { logEvent } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -76,6 +77,11 @@ export class Engine {
           ]
         : [];
       const meta = await this.llm.writeSong(state.guidance, recent);
+      // Optional hard guarantee — the prompt forbids parentheses, but the
+      // model ignores it now and then.
+      if (this.config.generation.stripParentheses) {
+        meta.lyrics = stripParentheses(meta.lyrics);
+      }
       return {
         id: crypto.randomUUID(),
         ...meta,
@@ -220,6 +226,10 @@ export class Engine {
             continue;
           }
           dispatching = state.drafts.splice(readyIdx, 1)[0];
+          // Second pass at dispatch catches manual edits and custom drafts.
+          if (this.config.generation.stripParentheses) {
+            dispatching.lyrics = stripParentheses(dispatching.lyrics);
+          }
           state.generating = { ...dispatching, startedAt: Date.now() };
           this.store.touch();
 

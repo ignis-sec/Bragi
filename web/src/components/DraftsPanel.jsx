@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { RefreshIcon, CrossIcon, PlusIcon, HamburgerIcon } from '../icons.jsx';
+import { ConceptChips, NoiseChips } from './Chips.jsx';
 
 // One upcoming song, editable until it's handed to ComfyUI. Keyed by draft.id
 // upstream, so a rewrite (new id) remounts and resets the buffer.
@@ -92,18 +93,8 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
             {index === 0 && <span className="draft-next-tag">next up</span>}
             {draft.custom && <span className="draft-next-tag custom">custom</span>}
             {incomplete && <span className="draft-next-tag incomplete">incomplete</span>}
-            {draft.concepts?.map((c) => (
-              <span
-                key={c.word}
-                className={`concept-chip ${draft.injected ? 'injected' : ''}`}
-                title={
-                  (draft.injected ? 'j-lens injected' : 'prompt seed') +
-                  (c.strength != null ? ` ×${c.strength}` : '')
-                }
-              >
-                {c.word}
-              </span>
-            ))}
+            <ConceptChips concepts={draft.concepts} injected={draft.injected} />
+            <NoiseChips noise={draft.noise} />
           </div>
           {!open && <div className="row-caption">{buf.caption}</div>}
         </div>

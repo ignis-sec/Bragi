@@ -6,8 +6,8 @@
   --border: #2a2a2a;
   --text: #fff;
   --muted: #a7a7a7;
-  --accent: #1db954;
-  --accent-hover: #1ed760;
+  --accent: #a855f7;
+  --accent-hover: #bd7cfa;
 }
 
 * {
@@ -409,7 +409,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 16px;
-  border: 1px solid #2f4f38;
+  border: 1px solid #45305c;
 }
 
 .gen-meta {
@@ -563,7 +563,7 @@ textarea {
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(29, 185, 84, 0.15);
+  background: rgba(168, 85, 247, 0.15);
   color: var(--accent);
   font-size: 10px;
   font-weight: 700;
@@ -621,6 +621,12 @@ textarea {
 .concept-chip.injected {
   background: rgba(94, 114, 235, 0.18);
   color: #9caaf5;
+}
+
+.concept-chip.noise {
+  background: transparent;
+  border: 1px dashed #3f3f3f;
+  color: #8a8a8a;
 }
 
 .status-concepts {
