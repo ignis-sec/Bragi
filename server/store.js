@@ -107,7 +107,7 @@ export class Store extends EventEmitter {
     this._save();
     fs.renameSync(LEGACY_DB_FILE, `${LEGACY_DB_FILE}.migrated`);
     console.log(
-      `[store] migrated ${this.state.songs.length} songs from db.json into muse.db (album art dropped for regeneration)`,
+      `[store] migrated ${this.state.songs.length} songs from db.json into bragi.db (album art dropped for regeneration)`,
     );
   }
 

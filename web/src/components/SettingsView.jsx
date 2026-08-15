@@ -217,7 +217,7 @@ function PromptEditor() {
     <section className="card">
       <div className="card-head">
         <div>
-          <h2>Qwen system prompt</h2>
+          <h2>Songwriter system prompt</h2>
           <div className="card-sub">Read fresh on every generation — no restart needed.</div>
         </div>
         <div className="card-head-actions">

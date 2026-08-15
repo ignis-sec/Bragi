@@ -104,7 +104,7 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
         </span>
         <button
           className="icon-btn"
-          title="Ask Qwen for a different song"
+          title="Ask Bragi for a different song"
           onClick={rewrite}
           disabled={rewriting}
         >
@@ -217,7 +217,7 @@ export default function DraftsPanel({ state }) {
       {drafts.length === 0 ? (
         <div className="draft-empty">
           {state.loopEnabled
-            ? 'Waiting for Qwen to write the upcoming songs…'
+            ? 'Waiting for Bragi to write the upcoming songs…'
             : 'Enable the generation loop and the upcoming songs will appear here.'}
         </div>
       ) : (

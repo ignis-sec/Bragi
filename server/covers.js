@@ -20,7 +20,7 @@ const RETRY_AFTER_MS = 10 * 60_000;
 
 // Generates album covers for bookmarked songs while the main pipeline is
 // idle. Two phases per batch, matching the app's VRAM choreography:
-//   1. Qwen writes image prompts for all pending covers (one LLM session),
+//   1. The LLM writes image prompts for all pending covers (one session),
 //      each stored on the song so a later tick can resume without the LLM.
 //   2. ComfyUI renders the covers one by one, yielding as soon as the main
 //      loop has work to do (queue drained / loop re-enabled).
@@ -122,7 +122,7 @@ export class CoverEngine {
         const cfg = this.config.llamacpp ?? {};
         target = {
           baseUrl: llama.baseUrl,
-          model: 'muse',
+          model: 'bragi',
           sampling: { temperature: cfg.temperature, topP: cfg.topP, topK: cfg.topK, minP: cfg.minP, repeatPenalty: cfg.repeatPenalty, maxTokens: cfg.maxTokens },
         };
       } else {

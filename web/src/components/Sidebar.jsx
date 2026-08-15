@@ -8,7 +8,7 @@ const PHASE_LABELS = {
   'waiting-drafts': 'Waiting — finish your custom drafts',
   'unloading-comfy': 'Unloading ComfyUI models…',
   'starting-llm': 'Starting the songwriter…',
-  'writing-draft': 'Qwen is writing the next song…',
+  'writing-draft': 'Bragi is writing the next song…',
   'unloading-llm': 'Stopping the songwriter…',
   'rendering-audio': 'ComfyUI is rendering audio…',
   covers: 'Making album covers…',
@@ -107,7 +107,7 @@ function GuidancePanel({ state }) {
           onChange={(e) => update('extra', e.target.value)}
         />
       </label>
-      <div className="g-hint">Applies to the next songs Qwen writes.</div>
+      <div className="g-hint">Applies to the next songs Bragi writes.</div>
     </div>
   );
 }
@@ -139,7 +139,7 @@ export default function Sidebar({ state, view, setView }) {
       <div className="side-card">
         <div className="logo">
           <NoteIcon size={26} />
-          <span>Muse</span>
+          <span>Bragi</span>
         </div>
         <nav>
           {navItem('home', <HomeIcon size={20} />, 'Home')}

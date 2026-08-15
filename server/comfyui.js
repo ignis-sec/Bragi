@@ -107,7 +107,7 @@ function comfyErrorMessage(entry) {
 
 // Ask ComfyUI to unload its cached models and free VRAM so the LLM can load.
 // Mirror of unloadModel() in lmstudio.js. Non-fatal: ComfyUI may simply not be
-// up yet, and the Qwen step doesn't need it running.
+// up yet, and the songwriting step doesn't need it running.
 export async function freeComfy(config) {
   try {
     const res = await fetch(`${config.comfyui.baseUrl}/free`, {

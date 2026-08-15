@@ -14,8 +14,8 @@ export default function App() {
   if (!state) {
     return (
       <div className="boot">
-        <div className="boot-logo">Muse</div>
-        <div>Connecting to the Muse server…</div>
+        <div className="boot-logo">Bragi</div>
+        <div>Connecting to the Bragi server…</div>
       </div>
     );
   }

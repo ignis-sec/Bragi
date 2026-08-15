@@ -2,7 +2,7 @@ import { generateSongMeta, unloadModel } from './lmstudio.js';
 import { LlamaCppBackend } from './llamacpp.js';
 import { requestSong, parseConceptSpec } from './songwriter.js';
 
-// A "session" spans one batch of Qwen songwriting between ComfyUI renders:
+// A "session" spans one batch of songwriting between ComfyUI renders:
 //   begin(guidance) -> writeSong() xN -> end()
 // lmstudio: begin is a no-op, end unloads via `lms unload`. Pinned concept
 //   seeds (guidance.concepts) are prompt-only.
@@ -109,7 +109,7 @@ class LlamaCppSession {
     const mention = (j.mentionInPrompt ?? true) ? this.concepts : null;
     return requestSong({
       baseUrl: this.backend.baseUrl,
-      model: 'muse', // llama-server serves a single model; the name is ignored
+      model: 'bragi', // llama-server serves a single model; the name is ignored
       sampling: {
         temperature: cfg.temperature,
         topP: cfg.topP,

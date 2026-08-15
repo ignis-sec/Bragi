@@ -7,7 +7,8 @@ export { ROOT, DATA_DIR };
 // config.json holds DEFAULTS only — the app never writes it. Every change made
 // from the settings page is stored in the database as a dotted-path override
 // and applied on top of the defaults at boot (and live, via updateConfig).
-export const CONFIG_PATH = process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json');
+export const CONFIG_PATH =
+  process.env.BRAGI_CONFIG ?? process.env.MUSE_CONFIG ?? path.join(ROOT, 'config.json');
 
 const BAD_SEGMENT = /^(__proto__|constructor|prototype)$/;
 

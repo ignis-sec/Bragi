@@ -271,14 +271,14 @@ if (fs.existsSync(webDist)) {
   app.get('/', (req, res) =>
     res
       .status(200)
-      .send('Muse server is running, but the web UI is not built yet. Run: npm run build'),
+      .send('Bragi server is running, but the web UI is not built yet. Run: npm run build'),
   );
 }
 
 const port = Number(process.env.PORT ?? config.server?.port ?? 7700);
 app.listen(port, () => {
-  console.log(`[muse] server on http://localhost:${port}`);
-  console.log(`[muse] LM Studio: ${config.lmstudio.baseUrl} (${config.lmstudio.model})`);
-  console.log(`[muse] ComfyUI:   ${config.comfyui.baseUrl}`);
-  console.log(`[muse] songs dir: ${SONGS_DIR}`);
+  console.log(`[bragi] server on http://localhost:${port}`);
+  console.log(`[bragi] LM Studio: ${config.lmstudio.baseUrl} (${config.lmstudio.model})`);
+  console.log(`[bragi] ComfyUI:   ${config.comfyui.baseUrl}`);
+  console.log(`[bragi] songs dir: ${SONGS_DIR}`);
 });
