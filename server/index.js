@@ -108,9 +108,10 @@ app.put('/api/system-prompt', express.text({ type: '*/*', limit: '1mb' }), (req,
 
 // ---- generation loop & settings ----
 
-app.post('/api/loop', (req, res) => {
-  engine.setLoop(Boolean(req.body?.enabled));
-  res.json({ loopEnabled: store.state.loopEnabled });
+// Body: { songwriter?: bool, composer?: bool } — either or both.
+app.post('/api/engine', (req, res) => {
+  engine.setFlags({ songwriter: req.body?.songwriter, composer: req.body?.composer });
+  res.json({ songwriterOn: store.state.songwriterOn, composerOn: store.state.composerOn });
 });
 
 app.post('/api/generating/cancel', (req, res) => {
@@ -181,6 +182,8 @@ app.patch('/api/drafts/:id', (req, res) => {
   for (const key of ['name', 'caption', 'lyrics']) {
     if (typeof req.body?.[key] === 'string') draft[key] = req.body[key];
   }
+  // Held drafts are skipped by the composer until released.
+  if ('hold' in (req.body ?? {})) draft.hold = Boolean(req.body.hold);
   store.touch();
   res.json(draft);
 });
@@ -203,7 +206,103 @@ app.delete('/api/drafts/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// Re-render an existing song: copy its exact name/caption/lyrics to the front
+// of Up next. With { hold: true } the draft waits for the user to edit and
+// release it; otherwise the composer picks it up next.
+app.post('/api/songs/:id/reroll', (req, res) => {
+  const song = store.song(req.params.id);
+  if (!song) return res.status(404).json({ error: 'Unknown song' });
+  const draft = {
+    id: crypto.randomUUID(),
+    name: song.name,
+    caption: song.caption,
+    lyrics: song.lyrics,
+    custom: true,
+    hold: Boolean(req.body?.hold),
+    concepts: null,
+    injected: false,
+    noise: null,
+    createdAt: Date.now(),
+  };
+  store.state.drafts.unshift(draft);
+  store.touch();
+  res.json(draft);
+});
+
+// ---- playlists ----
+
+app.post('/api/playlists/reorder', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
+  if (!ids) return res.status(400).json({ error: 'ids must be an array' });
+  const byId = new Map(store.state.playlists.map((p) => [p.id, p]));
+  const next = ids.map((id) => byId.get(id)).filter(Boolean);
+  for (const p of store.state.playlists) if (!next.includes(p)) next.push(p);
+  store.state.playlists = next;
+  store.touch();
+  res.json({ ok: true });
+});
+
+app.post('/api/playlists', (req, res) => {
+  const name = String(req.body?.name ?? '').trim();
+  if (!name) return res.status(400).json({ error: 'Playlist name is required.' });
+  const playlist = { id: crypto.randomUUID(), name, songIds: [], createdAt: Date.now() };
+  store.state.playlists.push(playlist);
+  store.touch();
+  res.json(playlist);
+});
+
+app.patch('/api/playlists/:id', (req, res) => {
+  const playlist = store.playlist(req.params.id);
+  if (!playlist) return res.status(404).json({ error: 'Unknown playlist' });
+  const name = String(req.body?.name ?? '').trim();
+  if (name) playlist.name = name;
+  store.touch();
+  res.json(playlist);
+});
+
+app.delete('/api/playlists/:id', (req, res) => {
+  const before = store.state.playlists.length;
+  store.state.playlists = store.state.playlists.filter((p) => p.id !== req.params.id);
+  if (store.state.playlists.length === before) {
+    return res.status(404).json({ error: 'Unknown playlist' });
+  }
+  store.touch();
+  res.json({ ok: true });
+});
+
+// Body: { add: [songIds], remove: [songIds] } — either or both.
+app.post('/api/playlists/:id/songs', (req, res) => {
+  const playlist = store.playlist(req.params.id);
+  if (!playlist) return res.status(404).json({ error: 'Unknown playlist' });
+  const add = Array.isArray(req.body?.add) ? req.body.add : [];
+  const remove = new Set(Array.isArray(req.body?.remove) ? req.body.remove : []);
+  playlist.songIds = playlist.songIds.filter((id) => !remove.has(id));
+  for (const id of add) {
+    if (store.song(id) && !playlist.songIds.includes(id)) playlist.songIds.push(id);
+  }
+  store.touch();
+  res.json(playlist);
+});
+
 // ---- songs / queue / history / bookmarks ----
+
+app.post('/api/queue/clear', (req, res) => {
+  store.state.queue = [];
+  store.touch();
+  res.json({ ok: true });
+});
+
+// Bulk bookmark toggle: { ids: [songIds], bookmarked: boolean }.
+app.post('/api/songs/bulk-bookmark', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids : [];
+  const bookmarked = Boolean(req.body?.bookmarked);
+  for (const id of ids) {
+    const song = store.song(id);
+    if (song) song.bookmarked = bookmarked;
+  }
+  store.touch();
+  res.json({ ok: true });
+});
 
 app.post('/api/songs/:id/played', (req, res) => {
   const song = store.song(req.params.id);

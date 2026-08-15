@@ -1,6 +1,8 @@
 import React from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
+import PlaylistPicker from './PlaylistPicker.jsx';
+import { openModal } from '../modal.js';
 import { PlayIcon, PauseIcon, NextIcon, PrevIcon, HeartIcon, DownloadIcon } from '../icons.jsx';
 
 function fmt(t) {
@@ -10,7 +12,7 @@ function fmt(t) {
   return `${m}:${s}`;
 }
 
-export default function PlayerBar({ player }) {
+export default function PlayerBar({ player, state }) {
   const { current, isPlaying, position, duration } = player;
   return (
     <footer className="player-bar">
@@ -18,7 +20,11 @@ export default function PlayerBar({ player }) {
         {current ? (
           <>
             <Art song={current} size={56} />
-            <div className="pb-meta">
+            <div
+              className="pb-meta clickable"
+              title="Song details"
+              onClick={() => openModal({ type: 'song', songId: current.id })}
+            >
               <div className="pb-name">{current.name}</div>
               <div className="pb-caption">{current.caption}</div>
             </div>
@@ -31,6 +37,7 @@ export default function PlayerBar({ player }) {
             >
               <HeartIcon filled={current.bookmarked} size={18} />
             </button>
+            <PlaylistPicker playlists={state?.playlists} songIds={[current.id]} size={17} />
             <a
               className="icon-btn"
               href={`/audio/${encodeURIComponent(current.file)}`}

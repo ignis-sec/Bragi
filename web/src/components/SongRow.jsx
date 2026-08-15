@@ -2,6 +2,7 @@ import React from 'react';
 import { api } from '../api.js';
 import Art from './Art.jsx';
 import { ConceptChips, NoiseChips } from './Chips.jsx';
+import PlaylistPicker from './PlaylistPicker.jsx';
 import {
   PlayIcon,
   HeartIcon,
@@ -10,6 +11,7 @@ import {
   NoteIcon,
   DownloadIcon,
   RefreshIcon,
+  CheckIcon,
 } from '../icons.jsx';
 
 function timeAgo(ts) {
@@ -29,10 +31,35 @@ export default function SongRow({
   onRemove,
   removeIcon,
   onRegenCover,
+  playlists,
+  selected,
+  onToggleSelect,
+  onContext,
+  dragIds,
 }) {
   const isCurrent = player.current?.id === song.id;
   return (
-    <div className={`song-row ${isCurrent ? 'current' : ''}`}>
+    <div
+      className={`song-row ${isCurrent ? 'current' : ''} ${selected ? 'selected' : ''}`}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData(
+          'application/x-bragi-songs',
+          JSON.stringify(dragIds?.length ? dragIds : [song.id]),
+        );
+      }}
+      onContextMenu={onContext ? (e) => onContext(e, song) : undefined}
+    >
+      {onToggleSelect && (
+        <button
+          className={`select-box ${selected ? 'on' : ''}`}
+          title={selected ? 'Deselect' : 'Select'}
+          onClick={() => onToggleSelect(song.id)}
+        >
+          {selected && <CheckIcon size={11} />}
+        </button>
+      )}
       <div className="row-index">
         {isCurrent && player.isPlaying ? (
           <span className="eq">
@@ -65,6 +92,7 @@ export default function SongRow({
         <button className="icon-btn" title="Play now" onClick={() => player.play(song)}>
           <PlayIcon size={16} />
         </button>
+        {playlists && <PlaylistPicker playlists={playlists} songIds={[song.id]} />}
         <a
           className="icon-btn"
           href={`/audio/${encodeURIComponent(song.file)}`}

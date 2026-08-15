@@ -63,16 +63,21 @@ export class CoverEngine {
       !state.generating &&
       !this.engine.inSession &&
       !this.engine.writing &&
-      ['idle', 'queue-full', 'waiting-drafts', 'error'].includes(phase)
+      ['idle', 'queue-full', 'waiting-drafts', 'lookahead-full', 'error'].includes(phase)
     );
   }
 
   // The main loop has (or is about to have) real work — get out of the way.
   shouldYield() {
     const { state } = this.store;
+    const readyDraft = state.drafts.some(
+      (d) => d.caption?.trim() && d.lyrics?.trim() && !d.hold,
+    );
     return (
-      state.loopEnabled &&
-      state.queue.length < (this.config.generation.maxQueuedSongs ?? 3)
+      (state.songwriterOn && state.drafts.length < this.engine.draftTarget) ||
+      (state.composerOn &&
+        readyDraft &&
+        state.queue.length < (this.config.generation.maxQueuedSongs ?? 3))
     );
   }
 

@@ -49,6 +49,10 @@ db.exec(`
     song_id   TEXT NOT NULL,
     played_at INTEGER NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS playlists (
+    position INTEGER PRIMARY KEY,
+    data     TEXT NOT NULL
+  );
 `);
 
 export function kvGet(key, fallback = null) {

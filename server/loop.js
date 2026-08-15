@@ -43,10 +43,12 @@ export class Engine {
     this.renderAbort.abort();
   }
 
-  setLoop(enabled) {
-    this.store.state.loopEnabled = enabled;
-    if (enabled) {
-      this.store.state.lastError = null;
+  setFlags({ songwriter, composer }) {
+    const { state } = this.store;
+    if (songwriter !== undefined) state.songwriterOn = Boolean(songwriter);
+    if (composer !== undefined) state.composerOn = Boolean(composer);
+    if (state.songwriterOn || state.composerOn) {
+      state.lastError = null;
       this.kick();
     }
     this.store.touch();
@@ -136,7 +138,7 @@ export class Engine {
   // Fill the draft queue up to `total`, one songwriter call at a time.
   async topUpDrafts(total) {
     const { state } = this.store;
-    while (state.loopEnabled && state.drafts.length < total) {
+    while (state.songwriterOn && state.drafts.length < total) {
       this.setPhase('writing-draft', `Writing drafts (${state.drafts.length + 1}/${total})`);
       try {
         const draft = await this.makeDraft();
@@ -181,7 +183,7 @@ export class Engine {
     this.running = true;
     const { state } = this.store;
     try {
-      while (state.loopEnabled) {
+      while (state.songwriterOn || state.composerOn) {
         let dispatching = null;
         try {
           // The cover engine yields as soon as we have work — wait it out.
@@ -190,38 +192,48 @@ export class Engine {
             await sleep(2000);
             continue;
           }
-          if (state.queue.length >= (this.config.generation.maxQueuedSongs ?? 3)) {
-            this.setPhase('queue-full', `${state.queue.length} songs waiting`);
-            await sleep(3000);
-            continue;
-          }
 
-          // Refill the pool to lookahead + 1: the extra one is dispatched to
-          // ComfyUI right below, leaving `draftTarget` drafts waiting and
-          // editable for the whole render. (Free ComfyUI's VRAM first —
-          // mirror of the songwriter unload.)
-          if (state.drafts.length < this.draftTarget + 1) {
+          // Songwriter: keep the up-next pool filled to the lookahead.
+          if (state.songwriterOn && state.drafts.length < this.draftTarget) {
             this.setPhase('unloading-comfy', 'Freeing VRAM for the songwriter');
             await freeComfy(this.config);
             this.setPhase('starting-llm');
             await this.beginSession();
             try {
-              await this.topUpDrafts(this.draftTarget + 1);
+              await this.topUpDrafts(this.draftTarget);
             } finally {
-              this.setPhase('unloading-llm', 'Freeing VRAM for ComfyUI');
+              this.setPhase('unloading-llm', 'Stopping the songwriter');
               await this.endSession();
             }
+            continue; // re-evaluate flags with a full pool
           }
-          if (!state.loopEnabled) break;
-          if (!state.drafts.length) continue; // top-up interrupted
 
+          if (!state.composerOn) {
+            if (state.songwriterOn) {
+              this.setPhase('lookahead-full', `${state.drafts.length} drafts ready`);
+            }
+            await sleep(2000);
+            continue;
+          }
+
+          // Composer: render from the pool. While the songwriter is on it
+          // waits for the lookahead to fill (handled above); with the
+          // songwriter off it drains whatever is there.
+          if (state.queue.length >= (this.config.generation.maxQueuedSongs ?? 3)) {
+            this.setPhase('queue-full', `${state.queue.length} songs waiting`);
+            await sleep(3000);
+            continue;
+          }
           // First render-ready draft goes to the studio; blank custom drafts
-          // are skipped until the user fills them in.
+          // and drafts held for editing are skipped.
           const readyIdx = state.drafts.findIndex(
-            (d) => d.caption?.trim() && d.lyrics?.trim(),
+            (d) => d.caption?.trim() && d.lyrics?.trim() && !d.hold,
           );
           if (readyIdx === -1) {
-            this.setPhase('waiting-drafts', 'All drafts are incomplete');
+            this.setPhase(
+              'waiting-drafts',
+              state.drafts.length ? 'Drafts are held or incomplete' : 'Up next is empty',
+            );
             await sleep(3000);
             continue;
           }

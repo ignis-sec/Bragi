@@ -37,7 +37,9 @@ export class Store extends EventEmitter {
     this.setMaxListeners(100);
     fs.mkdirSync(SONGS_DIR, { recursive: true });
     this.state = {
-      loopEnabled: false,
+      // Songwriter fills the draft pool; composer renders it. Independent.
+      songwriterOn: false,
+      composerOn: false,
       engine: { phase: 'idle', detail: null, since: Date.now() },
       lastError: null,
       guidance: { ...EMPTY_GUIDANCE },
@@ -55,6 +57,8 @@ export class Store extends EventEmitter {
       queue: [],
       // Listen history entries: { songId, playedAt }, oldest first.
       history: [],
+      // User playlists: { id, name, songIds: [], createdAt }.
+      playlists: [],
     };
     this._saveTimer = null;
     this._load();
@@ -80,6 +84,9 @@ export class Store extends EventEmitter {
         );
         this.state.history = rows('SELECT song_id, played_at FROM history ORDER BY id').map(
           (r) => ({ songId: r.song_id, playedAt: r.played_at }),
+        );
+        this.state.playlists = rows('SELECT data FROM playlists ORDER BY position').map((r) =>
+          JSON.parse(r.data),
         );
       }
       this._reconcileFiles();
@@ -142,6 +149,9 @@ export class Store extends EventEmitter {
     const ids = new Set(this.state.songs.map((s) => s.id));
     this.state.queue = this.state.queue.filter((id) => ids.has(id));
     this.state.history = this.state.history.filter((h) => ids.has(h.songId));
+    for (const p of this.state.playlists) {
+      p.songIds = (p.songIds ?? []).filter((id) => ids.has(id));
+    }
   }
 
   // Mark the state changed: notify SSE listeners and schedule a save.
@@ -152,12 +162,16 @@ export class Store extends EventEmitter {
   }
 
   _save() {
-    const { guidance, settings, drafts, songs, queue, history } = this.state;
+    const { guidance, settings, drafts, songs, queue, history, playlists } = this.state;
     try {
       db.exec('BEGIN');
       kvSet('guidance', guidance);
       kvSet('settings', settings);
-      db.exec('DELETE FROM songs; DELETE FROM drafts; DELETE FROM queue; DELETE FROM history;');
+      db.exec(
+        'DELETE FROM songs; DELETE FROM drafts; DELETE FROM queue; DELETE FROM history; DELETE FROM playlists;',
+      );
+      const insPlaylist = db.prepare('INSERT INTO playlists (position, data) VALUES (?, ?)');
+      playlists.forEach((p, i) => insPlaylist.run(i, JSON.stringify(p)));
       const insSong = db.prepare('INSERT INTO songs (position, data) VALUES (?, ?)');
       songs.forEach((s, i) => insSong.run(i, JSON.stringify(s)));
       const insDraft = db.prepare('INSERT INTO drafts (position, data) VALUES (?, ?)');
@@ -183,5 +197,9 @@ export class Store extends EventEmitter {
 
   draft(id) {
     return this.state.drafts.find((d) => d.id === id) ?? null;
+  }
+
+  playlist(id) {
+    return this.state.playlists.find((p) => p.id === id) ?? null;
   }
 }

@@ -93,6 +93,7 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
             {index === 0 && <span className="draft-next-tag">next up</span>}
             {draft.custom && <span className="draft-next-tag custom">custom</span>}
             {incomplete && <span className="draft-next-tag incomplete">incomplete</span>}
+            {draft.hold && <span className="draft-next-tag incomplete">on hold</span>}
             <ConceptChips concepts={draft.concepts} injected={draft.injected} />
             <NoiseChips noise={draft.noise} />
           </div>
@@ -102,6 +103,20 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
           {saveState === 'saving' && 'Saving…'}
           {saveState === 'conflict' && 'Already dispatched'}
         </span>
+        {draft.hold && (
+          <button
+            className="pill-btn"
+            title="Release for rendering"
+            onClick={(e) => {
+              e.stopPropagation();
+              api(`/api/drafts/${draft.id}`, { method: 'PATCH', body: { hold: false } }).catch(
+                () => {},
+              );
+            }}
+          >
+            Ready
+          </button>
+        )}
         <button
           className="icon-btn"
           title="Ask Bragi for a different song"
@@ -216,9 +231,9 @@ export default function DraftsPanel({ state }) {
       </div>
       {drafts.length === 0 ? (
         <div className="draft-empty">
-          {state.loopEnabled
+          {state.songwriterOn
             ? 'Waiting for Bragi to write the upcoming songs…'
-            : 'Enable the generation loop and the upcoming songs will appear here.'}
+            : 'Turn on the Songwriter and upcoming songs will appear here.'}
         </div>
       ) : (
         drafts.map((draft, i) => (

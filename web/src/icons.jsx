@@ -82,6 +82,40 @@ export const ClockIcon = (p) => (
   </Svg>
 );
 
+export const ChevronIcon = ({ open, ...p }) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2.2">
+    {open ? <path d="M5 14.5 12 8l7 6.5" /> : <path d="M5 9.5 12 16l7-6.5" />}
+  </Svg>
+);
+
+export const ListIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="4.5" cy="6" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="4.5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="4.5" cy="18" r="1.4" fill="currentColor" stroke="none" />
+  </Svg>
+);
+
+export const PlaylistAddIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M4 6h12M4 11h12M4 16h7" />
+    <path d="M17 13.5v6M14 16.5h6" />
+  </Svg>
+);
+
+export const CheckIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2.6">
+    <path d="M4.5 12.5 10 18 19.5 7" />
+  </Svg>
+);
+
+export const PencilIcon = (p) => (
+  <Svg {...p} fill="none" stroke="currentColor" strokeWidth="1.9">
+    <path d="M4 20l1-4L17.5 3.5a2.1 2.1 0 0 1 3 3L8 19z" />
+  </Svg>
+);
+
 export const PlusIcon = (p) => (
   <Svg {...p} fill="none" stroke="currentColor" strokeWidth="2.2">
     <path d="M12 5v14M5 12h14" />
