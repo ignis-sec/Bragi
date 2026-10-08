@@ -3,7 +3,16 @@ import { api } from '../api.js';
 import Art from './Art.jsx';
 import PlaylistPicker from './PlaylistPicker.jsx';
 import { openModal } from '../modal.js';
-import { PlayIcon, PauseIcon, NextIcon, PrevIcon, HeartIcon, DownloadIcon } from '../icons.jsx';
+import {
+  PlayIcon,
+  PauseIcon,
+  NextIcon,
+  PrevIcon,
+  HeartIcon,
+  DownloadIcon,
+  SpeakerIcon,
+  LaptopIcon,
+} from '../icons.jsx';
 
 function fmt(t) {
   if (!Number.isFinite(t)) return '0:00';
@@ -80,6 +89,24 @@ export default function PlayerBar({ player, state }) {
       </div>
 
       <div className="pb-right">
+        <div className="output-switch" role="group" aria-label="Play on">
+          <button
+            className={player.output === 'speakers' ? 'active' : ''}
+            title="Play through the Bragi server's speakers"
+            onClick={() => player.setOutput('speakers')}
+          >
+            <SpeakerIcon size={13} />
+            Speakers
+          </button>
+          <button
+            className={player.output === 'browser' ? 'active' : ''}
+            title="Play in this browser tab"
+            onClick={() => player.setOutput('browser')}
+          >
+            <LaptopIcon size={13} />
+            This browser
+          </button>
+        </div>
         <span className="pb-caption">vol</span>
         <input
           type="range"

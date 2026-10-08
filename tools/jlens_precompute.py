@@ -137,7 +137,7 @@ def _extract_jacobians(obj):
 
 
 def http_get(url, byte_range=None):
-    req = urllib.request.Request(url, headers={"User-Agent": "muse-jlens/0.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "bragi-jlens/0.1"})
     if byte_range is not None:
         req.add_header("Range", f"bytes={byte_range[0]}-{byte_range[1]}")
     with urllib.request.urlopen(req, timeout=120) as res:

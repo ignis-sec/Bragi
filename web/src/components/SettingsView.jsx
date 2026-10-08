@@ -24,6 +24,7 @@ const LOG_CATEGORIES = [
   { key: 'jlens', hint: 'Concept picks, control-vector builds, auto-adds' },
   { key: 'llamacpp', hint: 'llama-server spawn/health/stop' },
   { key: 'covers', hint: 'Album cover prompts and renders' },
+  { key: 'player', hint: 'Speaker playback (mpv): songs, output, failures' },
   { key: 'http', hint: 'Dashboard API requests and bodies' },
 ];
 
@@ -46,8 +47,12 @@ const LOGGING_SECTION = {
 const SECTIONS = [
   {
     title: 'Songwriter',
+    description:
+      '"llamacpp" and "lmstudio" are the stand-alone setups, where Bragi juggles the VRAM itself. With "broker", an external GPU broker owns the GPU: it runs llama-server with Bragi\'s model (j-lens vectors included) and ComfyUI, and lends them to Bragi through GPU leases — Bragi waits its turn and yields when the broker needs the GPU back.',
     fields: [
-      { path: 'llm.backend', label: 'Backend', type: 'select', options: ['lmstudio', 'llamacpp'], hint: 'Applies from the next writing session' },
+      { path: 'llm.backend', label: 'Backend', type: 'select', options: ['llamacpp', 'lmstudio', 'broker'], hint: 'Applies from the next writing session' },
+      { path: 'gpuBroker.url', label: 'GPU broker URL', type: 'text', hint: 'Lease API, used by the "broker" backend and ComfyUI via "broker"' },
+      { path: 'comfyui.via', label: 'ComfyUI via', type: 'select', options: ['direct', 'broker'], hint: '"direct" talks to comfyui.baseUrl and frees its VRAM before writing' },
       { path: 'generation.draftLookahead', label: 'Draft lookahead', type: 'number', hint: 'Editable drafts kept waiting during renders' },
       { path: 'generation.maxQueuedSongs', label: 'Max queued songs', type: 'number', hint: 'Loop pauses when this many rendered songs wait' },
       { path: 'generation.recentSongsInPrompt', label: 'Recent songs in prompt', type: 'bool', hint: 'List recent titles and ask for something clearly different' },
@@ -343,6 +348,87 @@ function LogViewer() {
   );
 }
 
+function ConceptListEditor() {
+  const [text, setText] = useState(null);
+  const [savedText, setSavedText] = useState(null);
+  const [status, setStatus] = useState('');
+
+  const load = (words) => {
+    const t = words.join('\n');
+    setText(t);
+    setSavedText(t);
+  };
+
+  useEffect(() => {
+    api('/api/concept-words')
+      .then((d) => load(d.words))
+      .catch(() => setStatus('failed to load'));
+  }, []);
+
+  const save = async () => {
+    setStatus('saving…');
+    try {
+      const { words } = await api('/api/concept-words', {
+        method: 'PUT',
+        body: { words: text.split('\n') },
+      });
+      load(words);
+      setStatus(`saved — ${words.length} words`);
+    } catch (err) {
+      setStatus(`save failed: ${err.message}`);
+    }
+  };
+
+  const reset = async () => {
+    if (!confirm('Replace the list with the default wordlist file?')) return;
+    try {
+      const { words } = await api('/api/concept-words/reset', { method: 'POST' });
+      load(words);
+      setStatus(`reset — ${words.length} words`);
+    } catch (err) {
+      setStatus(`reset failed: ${err.message}`);
+    }
+  };
+
+  const count = text == null ? 0 : text.split('\n').filter((l) => l.trim()).length;
+  const dirty = text !== savedText;
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <div>
+          <h2>Concept list</h2>
+          <div className="card-sub">
+            The pool for j-lens “random” concept mode — one lowercase word per line ({count}{' '}
+            words). New words are solved into the deck automatically the first time they're
+            drawn. Stored in the database; the file in tools/ is only the default.
+          </div>
+        </div>
+        <div className="card-head-actions">
+          <span className="save-state">{status}</span>
+          <button className="pill-btn" onClick={reset}>
+            Reset to default
+          </button>
+          <button className="pill-btn accent" onClick={save} disabled={text == null || !dirty}>
+            Save list
+          </button>
+        </div>
+      </div>
+      {text == null ? (
+        <div className="draft-empty">Loading…</div>
+      ) : (
+        <textarea
+          className="lyrics-input concept-editor"
+          rows={24}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          spellCheck={false}
+        />
+      )}
+    </section>
+  );
+}
+
 export default function SettingsView() {
   const [saved, setSaved] = useState(null); // config as on the server
   const [edits, setEdits] = useState({}); // dotted path -> new value
@@ -385,6 +471,9 @@ export default function SettingsView() {
             <button className={tab === 'logging' ? 'active' : ''} onClick={() => setTab('logging')}>
               Logging
             </button>
+            <button className={tab === 'concepts' ? 'active' : ''} onClick={() => setTab('concepts')}>
+              Concept list
+            </button>
           </div>
           <div className="card-sub">
             Changes hot-apply and are stored in the database; config.json holds the defaults.
@@ -406,10 +495,13 @@ export default function SettingsView() {
         </div>
       </div>
 
-      {(tab === 'general' ? sections : [LOGGING_SECTION]).map((section) => (
+      {(tab === 'general' ? sections : tab === 'logging' ? [LOGGING_SECTION] : []).map((section) => (
         <section className="card" key={section.title}>
           <div className="card-head">
-            <h2>{section.title}</h2>
+            <div>
+              <h2>{section.title}</h2>
+              {section.description && <div className="card-sub">{section.description}</div>}
+            </div>
           </div>
           <div className="settings-grid">
             {section.fields.map((field) => (
@@ -426,6 +518,7 @@ export default function SettingsView() {
 
       {tab === 'general' && <PromptEditor />}
       {tab === 'logging' && <LogViewer />}
+      {tab === 'concepts' && <ConceptListEditor />}
     </div>
   );
 }

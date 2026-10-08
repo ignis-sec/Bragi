@@ -5,22 +5,12 @@ import { DatabaseSync } from 'node:sqlite';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // BRAGI_DATA overrides the data dir (used by tests to keep the real db safe).
-const dataOverride = process.env.BRAGI_DATA ?? process.env.MUSE_DATA;
+const dataOverride = process.env.BRAGI_DATA;
 export const DATA_DIR = dataOverride ? path.resolve(dataOverride) : path.join(ROOT, 'data');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// One-time rename from the app's pre-release name.
 const DB_FILE = path.join(DATA_DIR, 'bragi.db');
-const OLD_DB_FILE = path.join(DATA_DIR, 'muse.db');
-if (!fs.existsSync(DB_FILE) && fs.existsSync(OLD_DB_FILE)) {
-  for (const suffix of ['', '-wal', '-shm']) {
-    if (fs.existsSync(OLD_DB_FILE + suffix)) {
-      fs.renameSync(OLD_DB_FILE + suffix, DB_FILE + suffix);
-    }
-  }
-  console.log('[db] renamed muse.db -> bragi.db');
-}
 
 // Single app database: live settings, config overrides, and all player state.
 // The JSON files (config.json, the old data/db.json) are defaults/legacy only.
@@ -50,6 +40,10 @@ db.exec(`
     played_at INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS playlists (
+    position INTEGER PRIMARY KEY,
+    data     TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS commissions (
     position INTEGER PRIMARY KEY,
     data     TEXT NOT NULL
   );

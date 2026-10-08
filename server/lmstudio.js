@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { requestSong } from './songwriter.js';
 
-export async function generateSongMeta(config, guidance, recentSongs, concepts = null) {
+export async function generateSongMeta(config, guidance, recentSongs, concepts = null, prompt = null) {
   const lm = config.lmstudio;
   return requestSong({
     baseUrl: lm.baseUrl,
@@ -19,6 +19,7 @@ export async function generateSongMeta(config, guidance, recentSongs, concepts =
     guidance,
     recentSongs,
     concepts,
+    prompt,
   });
 }
 

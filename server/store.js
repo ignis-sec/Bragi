@@ -31,6 +31,20 @@ const DEFAULT_SETTINGS = {
   albumArt: true,
 };
 
+// Only output and volume survive a restart; playback always starts idle.
+const DEFAULT_PLAYER_PREFS = { output: 'speakers', volume: 0.9 };
+
+function idlePlayer({ output, volume }) {
+  return {
+    output: output === 'browser' ? 'browser' : 'speakers',
+    status: 'idle',
+    songId: null,
+    position: { positionS: 0, timestampMs: Date.now(), speed: 0 },
+    durationS: null,
+    volume: Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 0.9,
+  };
+}
+
 export class Store extends EventEmitter {
   constructor() {
     super();
@@ -59,6 +73,11 @@ export class Store extends EventEmitter {
       history: [],
       // User playlists: { id, name, songIds: [], createdAt }.
       playlists: [],
+      // Songs requested via POST /api/write, waiting to be written:
+      // { id, prompt, guidance, play, status: waiting|writing|failed, error, createdAt }.
+      commissions: [],
+      // Server-side playback (mpv) — see player.js.
+      player: idlePlayer(DEFAULT_PLAYER_PREFS),
     };
     this._saveTimer = null;
     this._load();
@@ -88,6 +107,14 @@ export class Store extends EventEmitter {
         this.state.playlists = rows('SELECT data FROM playlists ORDER BY position').map((r) =>
           JSON.parse(r.data),
         );
+        // A commission interrupted mid-write by a restart is simply retried.
+        this.state.commissions = rows('SELECT data FROM commissions ORDER BY position').map(
+          (r) => {
+            const c = JSON.parse(r.data);
+            return c.status === 'writing' ? { ...c, status: 'waiting' } : c;
+          },
+        );
+        this.state.player = idlePlayer({ ...DEFAULT_PLAYER_PREFS, ...kvGet('player', {}) });
       }
       this._reconcileFiles();
     } catch (err) {
@@ -161,15 +188,36 @@ export class Store extends EventEmitter {
     this._saveTimer = setTimeout(() => this._save(), 500);
   }
 
+  // Notify listeners of a transient change (playback position/status) that
+  // isn't worth rewriting the database for.
+  notify() {
+    this.emit('change', this.state);
+  }
+
+  // A song finished or was skipped: off the queue, into the history.
+  markPlayed(id) {
+    const song = this.song(id);
+    if (!song) return false;
+    this.state.queue = this.state.queue.filter((q) => q !== song.id);
+    this.state.history.push({ songId: song.id, playedAt: Date.now() });
+    song.playCount = (song.playCount ?? 0) + 1;
+    this.touch();
+    return true;
+  }
+
   _save() {
-    const { guidance, settings, drafts, songs, queue, history, playlists } = this.state;
+    const { guidance, settings, drafts, songs, queue, history, playlists, commissions, player } =
+      this.state;
     try {
       db.exec('BEGIN');
       kvSet('guidance', guidance);
       kvSet('settings', settings);
+      kvSet('player', { output: player.output, volume: player.volume });
       db.exec(
-        'DELETE FROM songs; DELETE FROM drafts; DELETE FROM queue; DELETE FROM history; DELETE FROM playlists;',
+        'DELETE FROM songs; DELETE FROM drafts; DELETE FROM queue; DELETE FROM history; DELETE FROM playlists; DELETE FROM commissions;',
       );
+      const insCommission = db.prepare('INSERT INTO commissions (position, data) VALUES (?, ?)');
+      commissions.forEach((c, i) => insCommission.run(i, JSON.stringify(c)));
       const insPlaylist = db.prepare('INSERT INTO playlists (position, data) VALUES (?, ?)');
       playlists.forEach((p, i) => insPlaylist.run(i, JSON.stringify(p)));
       const insSong = db.prepare('INSERT INTO songs (position, data) VALUES (?, ?)');

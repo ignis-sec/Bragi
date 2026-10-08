@@ -1,78 +1,101 @@
 # Bragi
 
-Disposable music, generated on the fly, completely locally. Bragi — a local LLM served via LM Studio or llama.cpp — writes song metadata + lyrics, MiniMax-music-3 (via ComfyUI) renders the audio, and a Spotify-style dashboard plays the endless queue.
+![Home view: now playing with lyrics, Up next drafts, and the queue](readme-img/1.png)
+![Settings page](readme-img/2.png)
 
-## How the loop works
+Endless, disposable music, generated locally. A local LLM writes the songs (title, style caption, lyrics), MiniMax Music 3 running in ComfyUI performs them, and the server plays the result through your speakers with mpv. The web dashboard works as a remote, or as the player itself if you'd rather listen in the browser.
+
+Named after the Norse god of poetry and music.
+
+## How it works
 
 ```
-┌─> free ComfyUI VRAM (POST /free — unload cached models)
+┌─> free ComfyUI's VRAM
 │      │
-│   Bragi refills the draft pool to lookahead + 1 (LM Studio, tool call submit_song)
+│   songwriter LLM fills "Up next" with drafts
 │      │
-│   unload the songwriter LLM (free VRAM)
+│   unload the LLM
 │      │
-│   ComfyUI renders the oldest draft (MiniMax Music 3)   <── user edits the other drafts meanwhile
+│   ComfyUI renders the oldest draft      <── the other drafts stay editable
 │      │
-└── finished song lands in the queue, saved as songs/<Song Name>.mp3
+└── finished song joins the queue, saved as songs/<Song Name>.mp3
 ```
 
-Each side of the pipeline evicts the other before loading: ComfyUI's cached models are freed before the LM Studio routine (with a short settle wait for the VRAM to actually return), and the songwriter LLM is unloaded before rendering. All drafts are written **before** a render starts, so the GPU never runs both models at once — and during the whole audio render every remaining draft stays editable in the dashboard. A draft's edits are locked in the moment it's handed to ComfyUI.
+The LLM and the music model never sit in VRAM at the same time. Every draft is written before a render starts, so while ComfyUI works on one song you can still edit, reorder, rewrite or delete the rest. A draft is locked once it's handed to ComfyUI.
 
 ## Requirements
 
-- **Node.js 18+**
-- **LM Studio** serving on `http://127.0.0.1:1234` with `qwen/qwen3.6-35b-a3b` available (`lms server start`). The `lms` CLI should be on your PATH — it's used to unload the model between steps.
-- **ComfyUI** on `http://127.0.0.1:8188` with the MiniMax Music 3 nodes and models installed (see `audio_minimax_music_3.json`).
+- Node.js 22.13+ (Bragi uses the built-in `node:sqlite`)
+- `mpv` on the PATH, for playback through the server's speakers
+- [ComfyUI](https://github.com/comfyanonymous/ComfyUI) on `http://127.0.0.1:8188` with the MiniMax Music 3 nodes and models installed (see `audio_minimax_music_3.json`). Album covers use a Z-Image Turbo workflow (`album_cover.json`); that part is optional.
+- A songwriter LLM, one of:
+  - `llama-server` from [llama.cpp](https://github.com/ggml-org/llama.cpp) plus a GGUF model (default; required for j-lens concept injection)
+  - [LM Studio](https://lmstudio.ai) serving on `http://127.0.0.1:1234`, with the `lms` CLI on the PATH
 
-## Setup & run
+The defaults are tuned for Qwen3.6-35B-A3B on a 16 GB card, but any capable instruction-following model should work.
+
+## Setup
 
 ```bash
-npm run setup    # installs server + web dependencies
-npm run build    # builds the React frontend
-npm start        # serves everything on http://localhost:7700
+npm run setup    # server + web dependencies
+npm run build    # build the frontend
+npm start        # http://localhost:7700
 ```
 
-For frontend development: `npm run dev` (server on :7700, Vite dev server with hot reload on :5173).
+For frontend work, `npm run dev` runs the server on :7700 and Vite with hot reload on :5173.
 
-Open the dashboard, optionally fill in guidance (genre, BPM, mood, …), and flip the **Generation loop** switch. Once the first song lands in the queue, press play — from then on the queue auto-advances.
+Open the dashboard, fill in some guidance if you like (genre, BPM, mood, ...), and turn on the **Songwriter** and **Composer** switches. Once the first song is in the queue, press play. From then on the queue advances by itself.
 
-## Configuration — `config.json`
+## Configuration
+
+`config.json` holds the defaults. Changes made on the Settings page are stored in the database and applied on top of it, so the app never rewrites `config.json`. Set `BRAGI_CONFIG` to use a different file.
 
 | Key | Meaning |
 | --- | --- |
-| `llm.backend` | `"lmstudio"` or `"llamacpp"` — who runs the songwriter (see below) |
-| `llamacpp.*` | llama-server binary, GGUF path, port, ctx, extra args, and the `jlens` block |
+| `llm.backend` | `"llamacpp"` (default), `"lmstudio"` or `"broker"`. See [Songwriter backends](#songwriter-backends) |
+| `llamacpp.*` | llama-server binary, GGUF path, port, context size, sampling, extra args, and the `jlens` block |
 | `lmstudio.baseUrl` / `model` | LM Studio endpoint and model id |
-| `lmstudio.unload` | `"cli"` (run `lms unload --all`), `"ttl"` (rely on the per-request TTL only), or `"none"` |
+| `lmstudio.unload` | `"cli"` (`lms unload --all`), `"ttl"` (rely on the per-request TTL) or `"none"` |
 | `lmstudio.ttlSeconds` | JIT TTL sent with each request as a fallback auto-unload |
-| `comfyui.baseUrl` / `workflow` | ComfyUI endpoint and workflow template (with `${caption}` / `${lyrics}` placeholders) |
-| `comfyui.freeWaitMs` | How long to wait after `POST /free` for VRAM to actually come back |
-| `generation.maxQueuedSongs` | The loop pauses when this many unplayed songs are queued |
-| `generation.draftLookahead` | How many drafts stay waiting/editable while a render runs (default 3). The pool is refilled to this size + 1 every time a render finishes, however many are missing |
-| `generation.recentSongsInPrompt` | List recent songs in the prompt with a "write something clearly different" instruction (default on; toggle in Settings) |
-| `storage.songsDir` | Folder where finished songs are saved, named `<Song Name>.mp3` |
-| `server.port` | Dashboard/API port |
+| `comfyui.via` | `"direct"` (default) or `"broker"`. See [Sharing the GPU](#sharing-the-gpu-with-other-apps) |
+| `comfyui.baseUrl` / `workflow` | ComfyUI endpoint and workflow template (`${caption}` / `${lyrics}` placeholders) |
+| `comfyui.freeWaitMs` | How long to wait after `POST /free` for the VRAM to actually come back |
+| `comfyui.workflowOverrides` | Music generation parameters applied to the workflow at dispatch time |
+| `covers.workflow` / `workflowOverrides` | Album cover workflow (`$prompt` placeholder) and its parameters |
+| `generation.maxQueuedSongs` | The composer pauses when this many unplayed songs are queued |
+| `generation.draftLookahead` | How many drafts stay editable while a render runs (default 3) |
+| `generation.recentSongsInPrompt` | Show recent titles to the songwriter and ask for something different |
+| `generation.stripParentheses` | Remove parenthesized text from lyrics before rendering |
+| `gpuBroker.url` | GPU broker lease API, only used with the `"broker"` options |
+| `storage.songsDir` | Where finished songs are saved |
+| `server.port` | Dashboard/API port (or `PORT`) |
+| `logging.*` | Debug log categories, and an optional log file |
 
-Bragi's system prompt lives in `server/prompts/system-prompt.md` — edit it freely; it's read fresh on every generation.
+The songwriter's system prompt is `server/prompts/system-prompt.md` and the cover art director's is `server/prompts/cover-prompt.md`. Both are read fresh each time, and the system prompt can also be edited from Settings.
+
+If your LM Studio server needs an API key, copy `.env.example` to `.env` and set `LLM_API_KEY`. It's sent as a bearer token; a real environment variable takes precedence.
 
 ## Songwriter backends
 
-`llm.backend` selects who serves Bragi (the songwriter LLM):
+- **`llamacpp`**: Bragi starts its own `llama-server` for each writing session and kills it afterwards, which is also how the VRAM gets handed to ComfyUI. Set `llamacpp.model` to your GGUF, `llamacpp.serverBin` to the binary (defaults to `llama-server` on the PATH), and `llamacpp.extraArgs` to your usual flags, e.g. `["-ngl", "99", "--n-cpu-moe", "40"]` to keep MoE experts in system RAM. Server output goes to `data/llama-server.log`.
 
-- **`"lmstudio"`** (default) — the external LM Studio server, exactly as before.
-- **`"llamacpp"`** — Bragi spawns its own `llama-server` per writing session and kills it afterwards (which doubles as the VRAM handoff to ComfyUI). Set `llamacpp.model` to your GGUF path and `llamacpp.extraArgs` to your usual llama.cpp flags (e.g. `["-ngl", "99", "--n-cpu-moe", "40"]` to keep MoE experts in RAM on a 16 GB card). `llamacpp.serverBin` points at the binary — built locally from source with CUDA:
+  Building llama-server with CUDA:
 
   ```bash
   git clone https://github.com/ggml-org/llama.cpp && cd llama.cpp
-  cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc \
-        -DCMAKE_CUDA_ARCHITECTURES=120 -DLLAMA_CURL=OFF   # 120 = RTX 5080 (Blackwell)
+  cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=120 -DLLAMA_CURL=OFF
   cmake --build build --config Release --target llama-server -j
   ```
-  (`-DCMAKE_CUDA_COMPILER` matters on Ubuntu: CMake otherwise picks apt's old `/usr/bin/nvcc`, which fails against gcc 13.) Server logs land in `data/llama-server.log`.
 
-## j-lens concept injection (llamacpp backend only)
+  Set `CMAKE_CUDA_ARCHITECTURES` for your card (120 is RTX 50-series). On Ubuntu you may also need `-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc`, otherwise CMake can pick up an older apt `nvcc` that doesn't work with gcc 13.
 
-With `llamacpp.jlens.enabled`, each writing session injects 1–2 concepts directly into the model's residual stream while it writes, via a control vector derived from a fitted [Jacobian lens](https://github.com/anthropics/jacobian-lens): for concept word *w* and lens Jacobian `J_l`, the injected direction solves `J_l x ≈ u_w` (ridge-regularized), i.e. "the layer-l direction whose average forward effect is *saying w*".
+- **`lmstudio`**: uses an LM Studio server and unloads the model between steps with `lms`. No concept injection, but pinned concept seeds are still passed in the prompt.
+
+- **`broker`**: an external process runs llama-server and lends it out. See [Sharing the GPU](#sharing-the-gpu-with-other-apps).
+
+## j-lens concept injection
+
+With `llamacpp.jlens.enabled`, Bragi can steer the songwriter by adding control vectors to the model's residual stream. The vectors come from a fitted [Jacobian lens](https://github.com/anthropics/jacobian-lens): for a concept word *w* and the lens Jacobian `J_l` at layer *l*, the injected direction solves `J_l x ≈ u_w` (ridge-regularized). Roughly, it's the layer-*l* direction whose average downstream effect is "say *w*".
 
 One-time setup:
 
@@ -82,57 +105,97 @@ tools/.venv/bin/python tools/jlens_precompute.py \
     --lens /path/to/lens.pt --out data/jlens/deck.npz
 ```
 
-`jlens_precompute.py` fetches only the tokenizer and the needed `lm_head` rows from the HF model repo (KBs, via range requests) and solves pullback vectors for every word in `tools/jlens_wordlist.txt` (~150 curated concept words — edit it, then re-run). It also writes `deck-ainv.npy`, a ~640 MB per-layer solver cache. Use `--inspect` to dump the lens file structure if loading fails.
+`jlens_precompute.py` downloads only the tokenizer and the `lm_head` rows it needs from the Hugging Face repo (via range requests), then solves vectors for every word in `tools/jlens_wordlist.txt`. It also writes `deck-ainv.npy`, a per-layer solver cache of about 640 MB. If the lens file won't load, `--inspect` dumps its structure.
 
-**The deck is self-healing**: pin a concept that isn't in the deck and the server solves it on the fly (`jlens_make_cv.py --auto-add` → one small HF fetch + cached solves, a few seconds) and appends it to the deck permanently. Words added this way are pinned-only — they don't join the random rotation unless you also add them to the wordlist. Manual equivalent: `jlens_precompute.py --lens … --out data/jlens/deck.npz --add gasoline,asphalt`.
+Words that aren't in the deck get solved on demand: pin one and the server runs `jlens_make_cv.py --auto-add`, which takes a few seconds and adds the word to the deck for good. To add words by hand: `jlens_precompute.py --lens ... --out data/jlens/deck.npz --add gasoline,asphalt`.
 
-Injection is **opt-in per session**: with the dashboard's **Concept seeds** field empty, songs generate untouched. Pin concepts (`ocean, rust:0.2` — strengths optional) or type the literal word `random` to draw `conceptsPerSession` words from the wordlist; Bragi then builds `data/jlens/current.gguf` via `tools/jlens_make_cv.py` and passes it to llama-server as `--control-vector`. Knobs in `llamacpp.jlens`: `conceptsPerSession`, `strengthRange` (random per-concept strength), `layerRange` (which lens layers to inject), `mentionInPrompt` (also name the concepts in the prompt). Concepts appear as chips on drafts and in the engine status ("Injecting: ocean ×0.25").
+Injection is off unless you ask for it. Leave the **Concept seeds** field empty and songs are generated untouched. Enter concepts (`ocean, rust:0.2`, strengths optional) or the word `random` to draw `conceptsPerSession` words from the concept list. Bragi then builds `data/jlens/cv-<hash>.gguf` and passes it to llama-server with `--control-vector`. The active concepts show up as chips on drafts and in the engine status.
 
-**Calibration (measured on this model):** injection strength compounds across layers, and the dose–response ramp is steep. On the mid band (layers 12–20), ~**0.15–0.3** per concept flavors the song's imagery while staying coherent (the shipped default); ~0.5 degrades structure; on the wide band (8–30) use ~0.05–0.12 instead. Anything near 1+ makes the model literally chant the concept word. If a draft comes out as word salad, the status chips tell you which concepts/strengths to dial down.
+Tuning knobs live under `llamacpp.jlens`: `conceptsPerSession`, `strengthRange`, `layerRange` and `mentionInPrompt` (also name the concepts in the prompt).
 
-On the lmstudio backend, pinned Concept seeds still work as prompt-level seeds (no injection).
+**Calibration.** On Qwen3.6-35B-A3B, strength compounds across layers and the response is steep. On layers 12–20, 0.15–0.3 per concept colors the imagery while keeping the song coherent (the default). Around 0.5 the structure starts to fall apart, and near 1 the model just chants the word. If you inject across a wider band (say 8–30), stay around 0.05–0.12. When a draft comes out as word salad, the chips tell you what to turn down.
 
-**Sparse semantic noise** (sidebar toggle) adds a second, independent control vector per song: K random common words from the *full* vocabulary (~tens of thousands of candidates), blended with random positive weights into one pulled-back direction — a different meaning-bearing "dream tilt" every session, unlike isotropic noise which is near-orthogonal to every feature and does nothing at safe norms. Composes with concept injection (llama.cpp sums multiple `--control-vector` files). The roll is **re-randomized for every song**: since control vectors are fixed at process start, Bragi rebuilds `noise.gguf` and restarts the (warm) llama-server between drafts — a few seconds each. Tune blend size and strength in Settings (`llamacpp.jlens.noise.tokens` / `.strength`); the current roll shows live in the sidebar status and is stored on each draft/song. First use downloads and caches the full unembedding matrix (`data/jlens/lm-head.npy`, ~1 GB, one-time) so later sessions are fully local.
+### Sparse semantic noise (experimental)
 
-If your LM Studio server requires an API key, put it in a `.env` file at the project root (see `.env.example`): `LLM_API_KEY=...`. It's sent as an `Authorization: Bearer` header on chat requests; a real environment variable with the same name takes precedence over `.env`.
+This one is an improvised idea that I'm still trying out. I don't know yet how much it actually helps, so treat it as a toy rather than a feature, and expect the defaults to change.
 
-> **Note:** the caption/lyrics format in the system prompt follows `sample.txt`: a rich prose caption with `Global Metadata:` / `Vocal Details:` / `Arrangement:` paragraphs, and Title Case section tags (`[Verse 1]`, `[Chorus]`, `[Guitar solo]`…) in the lyrics.
+The problem it's poking at: a songwriter LLM left to itself keeps drifting back to the same handful of themes and images. Plain random noise in the activations doesn't fix that, because isotropic noise is nearly orthogonal to every feature and does nothing at safe norms. So instead, a sidebar toggle adds a second control vector to every song: a random blend of K common words from the full vocabulary, pulled back through the lens the same way as concepts. The hope is that each song gets a different, meaningful nudge, but whether that beats no noise at all is still an open question. It stacks with concept injection, since llama.cpp sums multiple control vectors.
+
+The blend is re-rolled for every song. Control vectors are fixed when llama-server starts, so Bragi restarts the (already warm) server between drafts, which costs a few seconds. Blend size and strength are in Settings (`llamacpp.jlens.noise.tokens` / `.strength`). The first use downloads the full unembedding matrix once (`data/jlens/lm-head.npy`, about 1 GB).
+
+## Playback
+
+The **Speakers / This browser** switch in the player bar picks where music plays:
+
+- **Speakers** (default): the server plays through mpv and runs the queue itself (auto-advance, autoplay, padding from bookmarks, play counts, history). Any number of dashboard tabs act as remotes. Extra mpv flags can be passed with `BRAGI_MPV_ARGS`.
+- **This browser**: the tab plays the audio and reports finished songs back to the server.
+
+Switching hands the current song over at the same position.
 
 ## Dashboard
 
-- **Songwriter & Composer** toggles + live engine status. The two halves of the pipeline run independently: the **Songwriter** keeps writing until Up next holds `draftLookahead` songs; the **Composer** renders from Up next into audio. With both on, the composer waits for the lookahead to fill, then they alternate (write one, render one). Songwriter alone stockpiles drafts; composer alone drains whatever is there — including immediately, the moment you switch the songwriter off.
-- **Re-render** — right-click any song for **Re-render (same song, new take)** (the exact title/caption/lyrics go to the front of Up next with a fresh seed) or **Edit & re-render…** (same, but the draft is parked **on hold** for you to tweak; press **Ready** on it to release it to the composer).
-- **Right-click menus** — every song row has a context menu with all actions (play, bookmark, add-to-playlist, re-render, edit, cover reroll, download, contextual remove, delete); playlists (sidebar and Playlists tab) get open/rename/delete.
-- **Drag & drop** — drag any song row onto a playlist in the sidebar to add it (dragging a selected row brings the whole selection); drag sidebar playlists to reorder them.
-- **Autoplay** toggle — starts playback automatically when a song lands in the queue and nothing is playing.
-- **Pad from bookmarks** toggle — when a song finishes and the queue is empty, plays a random bookmarked song instead of going silent.
-- **Guidance panel** — genre, BPM, mood, instruments, vocal type, language, free-form instructions. Applied to every song Bragi writes next.
-- **Up next panel** — the queue of drafts Bragi has already written (3 by default), each expandable and editable until it's dispatched. Per-draft **Rewrite** asks Bragi for a different song (note: this loads the LLM even if ComfyUI is mid-render); the ✕ discards a draft. **+ Custom song** adds your own hand-written entry (marked `custom`; it won't be sent to ComfyUI while caption or lyrics are empty — `incomplete` badge). Drag the ☰ handle to reorder the queue.
-- **In the studio card** — shows the song ComfyUI is currently rendering with elapsed time, and a **Cancel** button that interrupts the render and discards the half-made song (the loop moves straight on to the next draft).
-- **Queue** — rendered songs waiting to play; auto-advances, removable, with a **Clear queue** button (songs stay in the library).
-- **Playlists** — create them from the sidebar's collapsible Playlists section (or the Playlists tab), then add songs from the player bar, the now-playing card, or any song row's add-to-playlist button. The Playlists tab manages rename/delete; each playlist opens as its own view.
-- **Multi-select** — hover any song row (queue, history, bookmarks, playlist views) for a checkbox; with a selection active, a bulk bar offers add-to-playlist, favorite/unfavorite, and a context-aware remove (from queue / from playlist).
-- **Collapsible sidebar** — Controls (toggles), Guide the generation, and Playlists are collapsible sections; their state persists per browser.
-- **Now playing** — cover art, caption, full lyrics.
-- **Download** — every song row and the player bar have a download button for the mp3.
-- **Album art** toggle — while the pipeline is idle (queue full, loop off, or waiting), Bragi generates real cover art for bookmarked songs: Bragi (as an art director, `server/prompts/cover-prompt.md`) imagines what the cover *depicts* — a concrete visual scene, never "an album cover for…" — and ComfyUI renders it via `album_cover.json` (`$prompt` placeholder, `covers.workflow` in config). Covers land in `data/covers/` and replace the gradient placeholder everywhere the song appears. The cover engine holds the GPU only while the main loop is parked and yields the moment the queue drains; image prompts are cached per song so an interrupted batch resumes without the LLM.
-- **History** — every finished/skipped play with timestamps.
-- **Bookmarks** — heart a song while it plays (player bar or any song row) to keep it out of the disposable churn; deletable with its audio file. Each bookmarked song has a **reroll cover** button (↻) that discards the current art *and* its cached image prompt, so Bragi re-imagines the cover from scratch on the next idle window.
+- **Songwriter** and **Composer** run independently. The songwriter keeps writing until Up next holds `draftLookahead` drafts; the composer renders from Up next. With both on they take turns. The songwriter alone stockpiles drafts, the composer alone drains them.
+- **Guidance**: genre, BPM, mood, instruments, vocals, language and free-form notes, applied to everything written next.
+- **Up next**: drafts waiting to be rendered. Expand one to edit it, drag to reorder, **Rewrite** to ask for a different song, or add your own with **+ Custom song**. Drafts with an empty caption or lyrics are skipped.
+- **In the studio**: the song being rendered, with a **Cancel** button.
+- **Queue**: rendered songs waiting to play.
+- **Re-render**: right-click a song for a new take of the same lyrics, or **Edit & re-render** to tweak it first (the draft is held until you press **Ready**).
+- **Bookmarks** keep songs out of the disposable churn. **Playlists** live in the sidebar; drag songs onto them. Rows support multi-select, right-click menus and downloads.
+- **Album art**: while the pipeline is idle, Bragi generates covers for bookmarked songs. The LLM describes a scene for the cover, ComfyUI renders it, and it lands in `data/covers/`. The cover engine yields as soon as the song pipeline has work again.
 
-## Settings page
+## Settings
 
-The **Settings** view (gear icon) edits everything live: songwriter backend and sampling (temperature, top_p, top_k, min_p, repeat_penalty for both backends), LM Studio / llama.cpp connection details, j-lens defaults (strength range, injection layer range, per-session concept count), ComfyUI connection, music generation parameters (max duration, diffusion steps, both CFG values, sampler, scheduler, encode top_k, and the three model filenames), queue/lookahead sizes, and the full songwriter system prompt.
+The Settings page edits nearly everything live: backend and sampling, connection details, j-lens defaults, ComfyUI and music generation parameters, queue sizes, and the system prompt. Changes apply from the next writing session or render. `server.port` and `storage.songsDir` need a restart.
 
-The **Logging tab** toggles debug log categories — `engine` (loop lifecycle), `prompts` (full LLM prompts), `llmResponses` (raw responses + token usage), `comfy` (dispatches/renders/VRAM frees), `jlens` (concept picks, control-vector builds), `llamacpp` (server spawn/health), `http` (dashboard API calls with bodies) — and shows a live, filterable viewer of the last 500 entries (pause/clear, expandable payloads). Logs also go to the server console and optionally `data/muse.log`. Category toggles hot-apply like any other setting.
+Music parameters are stored as `comfyui.workflowOverrides` and matched to workflow nodes by `class_type` at dispatch time, so the exported workflow JSON stays untouched. Blank fields fall back to the template's values.
 
-Changes write back to `config.json` and **hot-apply**: the engine reads config at use-time and creates a fresh songwriter session each cycle, so everything takes effect on the next writing session or render — except `server.port` and `storage.songsDir`, which are flagged in the UI as needing a restart. Music parameters are stored as `comfyui.workflowOverrides` and applied to the workflow at dispatch time (matched by node `class_type`), so your exported `audio_minimax_music_3.json` stays pristine as a template; blank override fields fall back to the template's values.
+The **Concept list** tab holds the word pool for `random` concepts. It's seeded from `tools/jlens_wordlist.txt` on first run and lives in the database after that.
+
+The **Logging** tab toggles debug categories (`engine`, `prompts`, `llmResponses`, `comfy`, `jlens`, `llamacpp`, `covers`, `player`, `http`) and has a live log viewer.
 
 ## Storage
 
-All live state and settings live in **`data/bragi.db`** (SQLite, via Node's built-in `node:sqlite`): the song library, queue, history, drafts, guidance, dashboard toggles, and every settings-page change (stored as dotted-path overrides). **`config.json` is defaults only — the app never writes it**; edit it to change what a fresh database starts from, and use the Settings page for live values.
+Everything stateful lives in `data/bragi.db` (SQLite): library, queue, history, drafts, guidance, toggles, playback settings and config overrides. Songs are saved to `songs/<Song Name>.mp3` and covers to `data/covers/`. Delete `data/bragi.db` to start over. `BRAGI_DATA` moves the data directory.
 
-Finished songs are saved to `songs/<Song Name>.mp3` (configurable via `storage.songsDir`), covers to `data/covers/`. On first boot after the upgrade, the old `data/db.json` is imported automatically (renamed to `db.json.migrated`) — except album art, which is dropped and regenerated by the cover engine with the current art-director pipeline. Files from the old `data/audio/<uuid>.mp3` layout are still migrated and renamed on startup. Delete `data/bragi.db` to start fresh.
+## Requesting songs over HTTP
 
-## API (all local)
+Other programs (a chat assistant, a script, a home automation) can ask for songs. Requests skip the line and run even with both switches off.
 
-`GET /api/state` · `GET /api/events` (SSE) · `GET|PATCH /api/config` (dotted-path map, e.g. `{"lmstudio.temperature": 0.8}`) · `GET|PUT /api/system-prompt` · `GET /api/logs?since=<id>` · `POST /api/logs/clear` · `POST /api/engine {songwriter?, composer?}` · `POST /api/songs/:id/reroll {hold?}` · `POST /api/playlists/reorder` · `POST /api/generating/cancel` · `PATCH /api/settings` · `PATCH /api/guidance` · `PATCH /api/drafts/:id` · `POST /api/drafts/:id/regenerate` · `DELETE /api/drafts/:id` · `POST /api/songs/:id/played` · `POST /api/songs/:id/bookmark` · `POST /api/songs/bulk-bookmark` · `POST /api/queue/:id/remove` · `POST /api/queue/clear` · `POST|PATCH|DELETE /api/playlists[/:id]` · `POST /api/playlists/:id/songs {add,remove}` · `DELETE /api/songs/:id` · `GET /audio/<file>`
+- `POST /api/compose {name, caption, lyrics, play?}` puts ready-made lyrics at the front of Up next, to be rendered next.
+- `POST /api/write {guidance?, prompt?, play?}` commissions a song: the songwriter writes it in the background (`guidance` replaces the global guidance for that song, `prompt` is passed to the songwriter as-is), then it's rendered like above. Pending commissions show in Up next and survive restarts. `DELETE /api/commissions/:id` cancels one.
+- With `play: true`, the finished song goes to the front of the queue and starts right away if nothing is playing.
+
+`GET /api/view` (and `GET /api/view/events` as SSE) returns a compact state for external clients: player, current song with absolute `coverPath`/`audioPath`, the next 10 queued songs, engine status, drafts and commissions.
+
+## Sharing the GPU with other apps
+
+By default Bragi assumes it has the GPU to itself and juggles VRAM on its own. If something else on the machine also needs the GPU, you can put a broker in charge instead: a separate process that owns llama-server and ComfyUI and lends them out. Set `llm.backend` and `comfyui.via` to `"broker"` and point `gpuBroker.url` at it.
+
+Bragi then asks for a lease before each piece of GPU work:
+
+```
+POST {gpuBroker.url}/v1/gpu/leases
+→ held-open NDJSON stream: queued* → granted → ping* → revoked | end
+```
+
+- **Writing**: `{workload: "llm", client: "bragi", profile: "bragi", control_vectors: [...], purpose, urgent}`. A new lease is requested whenever the control vectors change. The `granted` event carries `base_url`, the llama-server to talk to.
+- **Rendering**: `{workload: "comfyui", ...}` around each song or cover render; `base_url` is the ComfyUI to use.
+- **Revocation**: the broker can take the GPU back at any time. An interrupted draft is retried and an interrupted render goes back to the front of Up next. Neither counts as an error.
+- **Urgent**: songs requested over the API ask for `urgent` leases.
+- Releasing a lease means closing the connection.
+
+## API reference
+
+All endpoints are local and unauthenticated.
+
+| | |
+| --- | --- |
+| State | `GET /api/state`, `GET /api/events` (SSE), `GET /api/view`, `GET /api/view/events` |
+| Library | `GET /api/library?query=&limit=20`, `DELETE /api/songs/:id`, `POST /api/songs/:id/bookmark`, `POST /api/songs/bulk-bookmark`, `POST /api/songs/:id/played`, `POST /api/songs/:id/reroll {hold?}`, `POST /api/songs/:id/cover/regenerate`, `GET /audio/<file>` |
+| Player | `POST /api/player/{play {songId?}, pause, toggle, next, previous, seek {positionS}, volume {volume}}`, `PATCH /api/player {output}` |
+| Queue | `POST /api/queue/:id/remove`, `POST /api/queue/clear` |
+| Drafts | `POST /api/drafts`, `POST /api/drafts/reorder`, `PATCH /api/drafts/:id`, `POST /api/drafts/:id/regenerate`, `DELETE /api/drafts/:id`, `POST /api/generating/cancel` |
+| Requests | `POST /api/compose`, `POST /api/write`, `DELETE /api/commissions/:id` |
+| Playlists | `POST\|PATCH\|DELETE /api/playlists[/:id]`, `POST /api/playlists/:id/songs {add, remove}`, `POST /api/playlists/reorder` |
+| Engine | `POST /api/engine {songwriter?, composer?}`, `PATCH /api/settings`, `PATCH /api/guidance` |
+| Config | `GET\|PATCH /api/config` (dotted paths, e.g. `{"llamacpp.temperature": 0.8}`), `GET\|PUT /api/system-prompt`, `GET\|PUT /api/concept-words`, `POST /api/concept-words/reset`, `GET /api/logs?since=<id>`, `POST /api/logs/clear` |

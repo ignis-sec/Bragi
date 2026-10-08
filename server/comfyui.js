@@ -6,6 +6,20 @@ import { logEvent } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// A poll wait that ends early on cancel, so revoked leases react quickly.
+function pause(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
+}
+
 // "Neon Skyline" -> "Neon Skyline.mp3", deduped against existing files.
 export function songFilename(name, ext) {
   const base =
@@ -106,8 +120,10 @@ function comfyErrorMessage(entry) {
 }
 
 // Ask ComfyUI to unload its cached models and free VRAM so the LLM can load.
-// Mirror of unloadModel() in lmstudio.js. Non-fatal: ComfyUI may simply not be
-// up yet, and the songwriting step doesn't need it running.
+// Mirror of unloadModel() in lmstudio.js. Direct mode only: with
+// comfyui.via "broker" the GPU broker does the eviction itself. Non-fatal:
+// ComfyUI may simply not be up yet, and the songwriting step doesn't need it
+// running.
 export async function freeComfy(config) {
   try {
     const res = await fetch(`${config.comfyui.baseUrl}/free`, {
@@ -126,22 +142,23 @@ export async function freeComfy(config) {
 }
 
 // Best effort: drop the prompt if it's still queued, interrupt it if running.
-async function cancelPrompt(cfg, promptId) {
+async function cancelPrompt(baseUrl, promptId) {
   try {
-    await fetch(`${cfg.baseUrl}/queue`, {
+    await fetch(`${baseUrl}/queue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ delete: [promptId] }),
     });
-    await fetch(`${cfg.baseUrl}/interrupt`, { method: 'POST' });
+    await fetch(`${baseUrl}/interrupt`, { method: 'POST' });
   } catch (err) {
     console.warn('[comfyui] could not cancel prompt:', err.message);
   }
 }
 
-// Submit a workflow and poll until its history entry completes.
-async function submitAndPoll(cfg, prompt, { signal, label } = {}) {
-  const res = await fetch(`${cfg.baseUrl}/prompt`, {
+// Submit a workflow and poll until its history entry completes. `baseUrl`
+// is the ComfyUI to use (a GPU lease's, or comfyui.baseUrl when direct).
+async function submitAndPoll(cfg, baseUrl, prompt, { signal, label } = {}) {
+  const res = await fetch(`${baseUrl}/prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, client_id: crypto.randomUUID() }),
@@ -159,15 +176,15 @@ async function submitAndPoll(cfg, prompt, { signal, label } = {}) {
   while (true) {
     if (signal?.aborted) {
       logEvent('comfy', `cancelling render (prompt_id ${promptId})`);
-      await cancelPrompt(cfg, promptId);
+      await cancelPrompt(baseUrl, promptId);
       const err = new Error('Render cancelled');
       err.cancelled = true;
       throw err;
     }
     if (Date.now() > deadline) throw new Error('ComfyUI generation timed out');
-    await sleep(cfg.pollIntervalMs ?? 3000);
+    await pause(cfg.pollIntervalMs ?? 3000, signal);
 
-    const hist = await fetch(`${cfg.baseUrl}/history/${promptId}`)
+    const hist = await fetch(`${baseUrl}/history/${promptId}`)
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
     const entry = hist?.[promptId];
@@ -184,18 +201,19 @@ async function submitAndPoll(cfg, prompt, { signal, label } = {}) {
   }
 }
 
-export async function renderSong(config, { name, caption, lyrics }, { signal } = {}) {
+export async function renderSong(config, { name, caption, lyrics }, { signal, baseUrl } = {}) {
   const cfg = config.comfyui;
+  const base = baseUrl ?? cfg.baseUrl;
   const workflowPath = path.resolve(ROOT, cfg.workflow);
   const template = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
   const prompt = substitute(template, { caption, lyrics });
   applyOverrides(prompt, cfg.workflowOverrides);
   randomizeSeeds(prompt);
 
-  const entry = await submitAndPoll(cfg, prompt, { signal, label: `song "${name}"` });
+  const entry = await submitAndPoll(cfg, base, prompt, { signal, label: `song "${name}"` });
   const audio = findAudioOutput(entry.outputs);
   if (!audio) throw new Error('ComfyUI finished but produced no audio output');
-  return await download(cfg, audio, name);
+  return await download(base, audio, name);
 }
 
 function findImageOutput(outputs = {}) {
@@ -207,14 +225,15 @@ function findImageOutput(outputs = {}) {
 }
 
 // Render an arbitrary image workflow (album covers). Returns the image bytes.
-export async function renderImage(config, { workflow, vars, signal, label, overrides }) {
+export async function renderImage(config, { workflow, vars, signal, label, overrides, baseUrl }) {
   const cfg = config.comfyui;
+  const base = baseUrl ?? cfg.baseUrl;
   const template = JSON.parse(fs.readFileSync(path.resolve(ROOT, workflow), 'utf8'));
   const prompt = substitute(template, vars);
   applyOverrides(prompt, overrides);
   randomizeSeeds(prompt);
 
-  const entry = await submitAndPoll(cfg, prompt, { signal, label });
+  const entry = await submitAndPoll(cfg, base, prompt, { signal, label });
   const image = findImageOutput(entry.outputs);
   if (!image) throw new Error('ComfyUI finished but produced no image output');
   const params = new URLSearchParams({
@@ -222,7 +241,7 @@ export async function renderImage(config, { workflow, vars, signal, label, overr
     subfolder: image.subfolder ?? '',
     type: image.type ?? 'output',
   });
-  const res = await fetch(`${cfg.baseUrl}/view?${params}`);
+  const res = await fetch(`${base}/view?${params}`);
   if (!res.ok) throw new Error(`Could not download image from ComfyUI (${res.status})`);
   return {
     buffer: Buffer.from(await res.arrayBuffer()),
@@ -230,13 +249,13 @@ export async function renderImage(config, { workflow, vars, signal, label, overr
   };
 }
 
-async function download(cfg, audio, name) {
+async function download(baseUrl, audio, name) {
   const params = new URLSearchParams({
     filename: audio.filename,
     subfolder: audio.subfolder ?? '',
     type: audio.type ?? 'output',
   });
-  const res = await fetch(`${cfg.baseUrl}/view?${params}`);
+  const res = await fetch(`${baseUrl}/view?${params}`);
   if (!res.ok) throw new Error(`Could not download audio from ComfyUI (${res.status})`);
   const buf = Buffer.from(await res.arrayBuffer());
   const ext = path.extname(audio.filename) || '.mp3';

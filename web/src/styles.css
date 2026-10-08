@@ -581,6 +581,16 @@ textarea {
   color: #e3b341;
 }
 
+.draft-next-tag.requested {
+  background: var(--accent);
+  color: #fff;
+}
+
+.draft-next-tag.failed {
+  background: rgba(241, 94, 108, 0.15);
+  color: #f15e6c;
+}
+
 .drag-handle {
   display: inline-flex;
   align-items: center;
@@ -1019,6 +1029,11 @@ textarea {
   padding-top: 12px;
 }
 
+.concept-editor {
+  max-width: 320px;
+  column-fill: auto;
+}
+
 .pb-meta.clickable {
   cursor: pointer;
 }
@@ -1343,6 +1358,38 @@ textarea {
 
 .pb-right input[type='range'] {
   width: 110px;
+}
+
+/* Speakers / This browser — same pill segment as the settings tabs */
+.output-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 8px;
+  background: #242424;
+  border-radius: 16px;
+  padding: 3px;
+  flex: none;
+}
+
+.output-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 13px;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.output-switch button:hover:not(.active) {
+  color: var(--text);
+}
+
+.output-switch button.active {
+  background: var(--text);
+  color: #000;
 }
 
 /* range sliders (seek + volume) */

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { RefreshIcon, CrossIcon, PlusIcon, HamburgerIcon } from '../icons.jsx';
+import { RefreshIcon, CrossIcon, PlusIcon, HamburgerIcon, PencilIcon } from '../icons.jsx';
 import { ConceptChips, NoiseChips } from './Chips.jsx';
 
 // One upcoming song, editable until it's handed to ComfyUI. Keyed by draft.id
@@ -91,6 +91,16 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
           <div className="row-name">
             {buf.name || 'Untitled'}
             {index === 0 && <span className="draft-next-tag">next up</span>}
+            {draft.priority && (
+              <span
+                className="draft-next-tag requested"
+                title={`Requested via the API — renders before everything else${
+                  draft.play ? ' and plays when ready' : ''
+                }`}
+              >
+                requested{draft.play ? ' · play' : ''}
+              </span>
+            )}
             {draft.custom && <span className="draft-next-tag custom">custom</span>}
             {incomplete && <span className="draft-next-tag incomplete">incomplete</span>}
             {draft.hold && <span className="draft-next-tag incomplete">on hold</span>}
@@ -158,8 +168,45 @@ function DraftItem({ draft, index, open, onToggle, drag }) {
   );
 }
 
+// A song requested via POST /api/write that Bragi hasn't written yet.
+function CommissionItem({ commission }) {
+  const { status, prompt, error } = commission;
+  const label = { waiting: 'waiting', writing: 'writing…', failed: 'failed' }[status] ?? status;
+  return (
+    <div className="draft-item">
+      <div className="draft-head">
+        <span className="draft-pos">
+          <PencilIcon size={12} />
+        </span>
+        <div className="row-meta">
+          <div className="row-name">
+            Requested song
+            <span className={`draft-next-tag ${status === 'failed' ? 'failed' : 'requested'}`}>
+              {label}
+            </span>
+            {commission.play && <span className="draft-next-tag custom">plays when ready</span>}
+          </div>
+          <div className="row-caption">
+            {status === 'failed' ? error : prompt || 'Written with the requested guidance'}
+          </div>
+        </div>
+        <button
+          className="icon-btn"
+          title={status === 'failed' ? 'Dismiss' : 'Cancel this request'}
+          onClick={() =>
+            api(`/api/commissions/${commission.id}`, { method: 'DELETE' }).catch(() => {})
+          }
+        >
+          <CrossIcon size={13} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DraftsPanel({ state }) {
   const drafts = state.drafts ?? [];
+  const commissions = state.commissions ?? [];
   const [openId, setOpenId] = useState(null);
   const [dragId, setDragId] = useState(null);
   const [overId, setOverId] = useState(null);
@@ -229,7 +276,10 @@ export default function DraftsPanel({ state }) {
           </button>
         </div>
       </div>
-      {drafts.length === 0 ? (
+      {commissions.map((c) => (
+        <CommissionItem key={c.id} commission={c} />
+      ))}
+      {drafts.length === 0 && commissions.length === 0 ? (
         <div className="draft-empty">
           {state.songwriterOn
             ? 'Waiting for Bragi to write the upcoming songs…'

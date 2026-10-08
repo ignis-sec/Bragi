@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { config, DATA_DIR, ROOT } from './config.js';
+import { DATA_DIR } from './config.js';
 import { freeComfy, renderImage } from './comfyui.js';
 import { requestCoverPrompt } from './songwriter.js';
-import { LlamaCppBackend } from './llamacpp.js';
-import { unloadModel } from './lmstudio.js';
+import { openPlainLLM } from './llm.js';
+import { acquire, comfyViaBroker } from './gpu.js';
 import { logEvent } from './logger.js';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +24,9 @@ const RETRY_AFTER_MS = 10 * 60_000;
 //      each stored on the song so a later tick can resume without the LLM.
 //   2. ComfyUI renders the covers one by one, yielding as soon as the main
 //      loop has work to do (queue drained / loop re-enabled).
+// Via a GPU broker, both phases run under GPU leases (the prompts on Bragi's
+// model without control vectors); a revoked lease ends the batch quietly and
+// a later tick resumes it.
 export class CoverEngine {
   constructor(store, cfg, engine) {
     this.store = store;
@@ -74,6 +77,7 @@ export class CoverEngine {
       (d) => d.caption?.trim() && d.lyrics?.trim() && !d.hold,
     );
     return (
+      this.engine.hasPriorityWork() ||
       (state.songwriterOn && state.drafts.length < this.engine.draftTarget) ||
       (state.composerOn &&
         readyDraft &&
@@ -102,49 +106,53 @@ export class CoverEngine {
         try {
           await this.renderCover(song);
         } catch (err) {
+          if (err.preempted || err.aborted) {
+            logEvent('covers', `cover batch interrupted: ${err.message}`);
+            break;
+          }
           logEvent('covers', `cover FAILED for "${song.name}": ${err.message}`);
           this.failedAt.set(song.id, Date.now());
         }
       }
+    } catch (err) {
+      if (!err.preempted && !err.aborted) throw err;
+      logEvent('covers', `cover batch interrupted: ${err.message}`);
     } finally {
       this.engine.coverBusy = false;
       this.running = false;
     }
   }
 
+  // Waiting for a GPU lease is called off once the song pipeline needs it.
+  yieldSignal() {
+    const ctl = new AbortController();
+    const timer = setInterval(() => {
+      if (this.shouldYield()) ctl.abort();
+    }, 1000);
+    return { signal: ctl.signal, done: () => clearInterval(timer) };
+  }
+
   // One LLM session writes image prompts for every pending cover.
   async writePrompts(songs) {
     logEvent('covers', `writing cover prompts for ${songs.length} song(s)`);
-    await freeComfy(this.config);
+    if (!comfyViaBroker(this.config)) await freeComfy(this.config);
     const system = fs.readFileSync(COVER_PROMPT_PATH, 'utf8');
-    const backend = this.config.llm?.backend ?? 'lmstudio';
-    let llama = null;
-    let target;
+    const wait = this.yieldSignal();
+    let llm;
     try {
-      if (backend === 'llamacpp') {
-        llama = new LlamaCppBackend(this.config);
-        await llama.start([]); // no control vectors for art direction
-        const cfg = this.config.llamacpp ?? {};
-        target = {
-          baseUrl: llama.baseUrl,
-          model: 'bragi',
-          sampling: { temperature: cfg.temperature, topP: cfg.topP, topK: cfg.topK, minP: cfg.minP, repeatPenalty: cfg.repeatPenalty, maxTokens: cfg.maxTokens },
-        };
-      } else {
-        const lm = this.config.lmstudio;
-        target = {
-          baseUrl: lm.baseUrl,
-          apiKey: process.env.LLM_API_KEY,
-          model: lm.model,
-          ttl: lm.ttlSeconds,
-          sampling: { temperature: lm.temperature, topP: lm.topP, topK: lm.topK, minP: lm.minP, repeatPenalty: lm.repeatPenalty, maxTokens: lm.maxTokens },
-        };
-      }
+      llm = await openPlainLLM(this.config, {
+        purpose: 'Writing album cover prompts',
+        signal: wait.signal,
+      });
+    } finally {
+      wait.done();
+    }
+    try {
       for (const song of songs) {
         if (this.shouldYield()) break;
         try {
           const prompt = await requestCoverPrompt({
-            ...target,
+            ...llm.target,
             system,
             user: `Title: ${song.name}\n\nCaption:\n${song.caption}\n\nLyrics:\n${song.lyrics}`,
           });
@@ -152,24 +160,51 @@ export class CoverEngine {
           logEvent('covers', `cover prompt for "${song.name}"`, { prompt: song.coverPrompt });
           this.store.touch();
         } catch (err) {
+          if (llm.isRevoked()) {
+            logEvent('covers', 'GPU lease revoked — cover prompts paused');
+            break;
+          }
           logEvent('covers', `prompt FAILED for "${song.name}": ${err.message}`);
           this.failedAt.set(song.id, Date.now());
         }
       }
     } finally {
-      if (llama) await llama.stop();
-      else await unloadModel(this.config);
+      await llm.close();
     }
   }
 
   async renderCover(song) {
+    let lease = null;
+    if (comfyViaBroker(this.config)) {
+      const wait = this.yieldSignal();
+      try {
+        lease = await acquire(this.config, {
+          workload: 'comfyui',
+          purpose: `Album cover for "${song.name}"`,
+          signal: wait.signal,
+        });
+      } finally {
+        wait.done();
+      }
+    }
     logEvent('covers', `rendering cover for "${song.name}"`);
-    const { buffer, ext } = await renderImage(this.config, {
-      workflow: this.config.covers?.workflow ?? './album_cover.json',
-      vars: { prompt: song.coverPrompt },
-      label: `cover "${song.name}"`,
-      overrides: this.config.covers?.workflowOverrides,
-    });
+    let rendered;
+    try {
+      rendered = await renderImage(this.config, {
+        workflow: this.config.covers?.workflow ?? './album_cover.json',
+        vars: { prompt: song.coverPrompt },
+        label: `cover "${song.name}"`,
+        overrides: this.config.covers?.workflowOverrides,
+        baseUrl: lease?.baseUrl,
+        signal: lease?.signal,
+      });
+    } catch (err) {
+      if (lease?.isRevoked) err.preempted = true;
+      throw err;
+    } finally {
+      lease?.release();
+    }
+    const { buffer, ext } = rendered;
     fs.mkdirSync(COVERS_DIR, { recursive: true });
     const file = `${song.id}${ext}`;
     fs.writeFileSync(path.join(COVERS_DIR, file), buffer);

@@ -6,7 +6,7 @@
     "backend": "llamacpp"
   },
   "llamacpp": {
-    "serverBin": "/home/ignis/Repositories/llama.cpp/build/bin/llama-server",
+    "serverBin": "llama-server",
     "model": "./models/llm/Qwen3.6-35B-A3B-Q4_K_M.gguf",
     "port": 8080,
     "ctxSize": 16384,
@@ -60,6 +60,7 @@
     "unload": "cli"
   },
   "comfyui": {
+    "via": "direct",
     "baseUrl": "http://127.0.0.1:8188",
     "workflow": "./audio_minimax_music_3.json",
     "pollIntervalMs": 3000,
@@ -100,12 +101,15 @@
     "recentSongsInPrompt": false,
     "stripParentheses": true
   },
+  "gpuBroker": {
+    "url": "http://127.0.0.1:7710"
+  },
   "storage": {
     "songsDir": "./songs"
   },
   "logging": {
     "toFile": true,
-    "file": "./data/muse.log",
+    "file": "./data/bragi.log",
     "categories": {
       "engine": true,
       "prompts": true,
@@ -114,6 +118,7 @@
       "jlens": true,
       "llamacpp": false,
       "covers": true,
+      "player": false,
       "http": false
     }
   }

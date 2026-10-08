@@ -74,7 +74,7 @@ export function parseConceptSpec(spec) {
     .filter((c) => c.word);
 }
 
-function buildUserMessage(guidance = {}, recentSongs = [], concepts = null) {
+function buildUserMessage(guidance = {}, recentSongs = [], concepts = null, prompt = null) {
   const lines = ['Write the next song.'];
   const constraints = [];
   if (guidance.genre) constraints.push(`Genre/style: ${guidance.genre}`);
@@ -85,9 +85,13 @@ function buildUserMessage(guidance = {}, recentSongs = [], concepts = null) {
   if (guidance.language) constraints.push(`Lyrics language: ${guidance.language}`);
   if (guidance.extra) constraints.push(`Extra instructions: ${guidance.extra}`);
 
+  const request = String(prompt ?? '').trim();
   if (constraints.length) {
     lines.push('', 'The listener asked for:', ...constraints.map((c) => `- ${c}`));
-  } else {
+  }
+  if (request) {
+    lines.push('', `The listener asked for this song specifically: ${request}`);
+  } else if (!constraints.length) {
     lines.push('', 'No constraints this time — pick a direction yourself and surprise the listener.');
   }
 
@@ -199,6 +203,7 @@ export async function requestCoverPrompt({
   user,
   maxTokens = 4096,
   ttl,
+  signal,
 }) {
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -215,6 +220,7 @@ export async function requestCoverPrompt({
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal,
     });
     return { res, text: res.ok ? null : await res.text().catch(() => '') };
   };
@@ -281,7 +287,8 @@ export async function requestCoverPrompt({
 }
 
 // One songwriting request against any OpenAI-compatible chat endpoint
-// (LM Studio or llama-server). Falls back to tool-free JSON output if the
+// (LM Studio or llama-server). `prompt` is an optional free-text request
+// from the listener; `signal` aborts the request (e.g. a revoked GPU lease). Falls back to tool-free JSON output if the
 // server rejects the tools/tool_choice fields.
 export async function requestSong({
   baseUrl,
@@ -293,13 +300,15 @@ export async function requestSong({
   guidance,
   recentSongs,
   concepts,
+  prompt,
+  signal,
 }) {
   const systemPrompt = fs.readFileSync(PROMPT_PATH, 'utf8');
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   const messages = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: buildUserMessage(guidance, recentSongs, concepts) },
+    { role: 'user', content: buildUserMessage(guidance, recentSongs, concepts, prompt) },
   ];
 
   const send = async (body) => {
@@ -307,6 +316,7 @@ export async function requestSong({
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      signal,
     });
     return { res, text: res.ok ? null : await res.text().catch(() => '') };
   };

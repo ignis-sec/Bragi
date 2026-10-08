@@ -44,15 +44,20 @@ const PHASE_LABELS = {
   'unloading-llm': 'Stopping the songwriter…',
   'rendering-audio': 'ComfyUI is rendering audio…',
   covers: 'Making album covers…',
+  'waiting-gpu': 'Waiting for the GPU…',
+  preempted: 'Paused — another workload needed the GPU',
   error: 'Error — retrying shortly',
 };
 
 function EngineStatus({ state }) {
   const { engine, songwriterOn, composerOn, lastError, generating } = state;
-  const anyOn = songwriterOn || composerOn;
+  // The engine also runs with both toggles off for songs requested over the API.
+  const anyOn = songwriterOn || composerOn || (engine?.phase && engine.phase !== 'idle');
   let label = anyOn ? (PHASE_LABELS[engine?.phase] ?? engine?.phase) : 'Songwriter & composer off';
   if (engine?.phase === 'rendering-audio' && generating?.name) {
     label = `Rendering “${generating.name}”…`;
+  } else if (engine?.phase === 'waiting-gpu' && engine.detail) {
+    label = `${engine.detail}…`;
   }
   const busy =
     anyOn && !['idle', 'queue-full', 'lookahead-full', 'waiting-drafts', 'error'].includes(engine?.phase);
